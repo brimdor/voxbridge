@@ -453,18 +453,27 @@ class TTS:
         if self.expression_processor and expression_tags:
             wav = self.expression_processor.apply(wav, expression_tags, self.sample_rate)
 
-        # Resample 24 kHz Kokoro output → 44.1 kHz to match Supertone and sound native
-        if self.sample_rate != 44100:
+        # Resample Kokoro output to 44.1 kHz to match Supertone and sound native.
+        # Always read the native rate from the backend — never rely on mutated
+        # instance state, because self.sample_rate gets set to 44100 after the
+        # first call and subsequent calls would skip resampling, writing 24 kHz
+        # data with a 44.1 kHz header (chipmunk bug).
+        native_sr = self._backend.sample_rate if hasattr(self._backend, 'sample_rate') else self.sample_rate
+        target_sr = 44100
+        if native_sr != target_sr:
             from scipy.signal import resample_poly
-            old_sr = self.sample_rate
-            new_sr = 44100
-            wav = resample_poly(wav, new_sr, old_sr, axis=1).astype(np.float32)
-            self.sample_rate = new_sr
+            wav = resample_poly(wav, target_sr, native_sr, axis=1).astype(np.float32)
+            output_sr = target_sr
+        else:
+            output_sr = native_sr
 
-        duration_s = wav.shape[1] / self.sample_rate
+        duration_s = wav.shape[1] / output_sr
+
+        # Keep self.sample_rate in sync with actual output rate for save_audio()
+        self.sample_rate = output_sr
 
         if verbose:
-            print(f"   -> Generated {duration_s:.2f}s audio @ {self.sample_rate} Hz")
+            print(f"   -> Generated {duration_s:.2f}s audio @ {output_sr} Hz")
 
         return wav, duration_s
 
