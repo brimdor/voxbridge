@@ -6,7 +6,36 @@ All notable changes to VoxBridge are documented in this file.
 
 No changes yet.
 
-## [0.2.0] - 2026-05-24
+## [0.2.2] - 2026-05-24
+
+### API
+- Added top-level convenience functions `synthesize()` and `save_audio()` for one-shot usage without TTS instance management.
+- Exposed `list_providers`, `get_provider`, `build_backend` at package level.
+
+### CLI
+- `tts` and `say` commands now accept **stdin** when no positional text argument is given.
+- `say` command now supports `--output` to save audio and play in a single run.
+- Updated `--voice` help text to list current recommended voices and point to `voxbridge list-voices --provider kokoro`.
+
+### Quality
+- Suppressed spurious phonemizer "words count mismatch" warnings originating from the kokoro-onnx espeak backend. These fired on virtually every English sentence and provided no actionable value.
+
+### Internal
+- Version bumped to 0.2.2.
+
+## [0.2.1] - 2026-05-24
+
+### Added
+- Pluggable backend architecture: `TTSBackend` protocol with `SupertoneBackend` and `KokoroBackend`.
+- Kokoro-82M ONNX backend: 53 voices, ~4.5x realtime, significantly better English quality than Supertone. Requires `pip install kokoro-onnx`.
+- Provider-aware `<laugh/>` expression: volume swell on Kokoro, tremolo+jitter on Supertone.
+- Kokoro output resampled from 24 kHz → 44.1 kHz to match Supertone.
+- 120 ms phrase-ending fade-out on Kokoro to smooth energy dips.
+- Restored "hundred" in normalizer for numbers in 100–999 range (e.g., `$12,458.75`).
+- `synthesize()` now returns `float` duration instead of `np.ndarray([1.23])`.
+- Default speed changed from 1.05 → 1.0.
+
+## [0.2.0] - 2026-05-23
 
 ### Security
 - Added configurable caps on style vector element counts via `VOXBRIDGE_MAX_STYLE_ELEMENTS` (default 1_000_000), preventing memory exhaustion from malicious uploaded styles.

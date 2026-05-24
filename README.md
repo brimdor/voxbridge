@@ -46,6 +46,28 @@ First run automatically downloads model weights:
 
 ## Quick Start
 
+### One-Shot Synthesis (new in v0.2.2)
+
+No TTS instance needed — use the top-level convenience functions:
+
+```python
+from voxbridge import synthesize, save_audio
+
+# Generate and save in two lines
+wav, dur = synthesize("Hello world!", voice="sky", provider="kokoro", speed=0.95)
+save_audio(wav, "hello.wav", sample_rate=44100)
+```
+
+Or chain the providers directly:
+
+```python
+from voxbridge import list_providers, build_backend
+
+print(list_providers())  # ['kokoro', 'supertone']
+backend = build_backend("kokoro")
+wav = backend.synthesize("Hello!", voice="heart", speed=1.0)
+```
+
 ### Supertone (default — 31 languages, M1–F5 voices)
 
 ```python
@@ -173,6 +195,14 @@ voxbridge tts "Hello world" -o hello.wav --voice M1
 
 # Kokoro — best English, 53 voices
 voxbridge tts "Hello world" -o hello.wav --provider kokoro --voice bella
+
+# Stdin support (v0.2.2+) — no positional text argument needed
+voxbridge tts -o hello.wav --provider kokoro --voice bella <<'EOF'
+Hello from stdin! This works with piped data too.
+EOF
+
+# say + save simultaneously (v0.2.2+)
+voxbridge say "Hello world" --output hello.wav --provider kokoro --voice bella
 
 # Start server with Kokoro
 voxbridge serve --provider kokoro --host 127.0.0.1 --port 7788
