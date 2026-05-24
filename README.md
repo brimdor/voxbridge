@@ -2,6 +2,8 @@
 
 **Open TTS engine — local, private, expressiveness unlocked.**
 
+> VoxBridge is a fork of the MIT-licensed [Supertonic Python SDK](https://github.com/supertone-inc/supertonic-py) by Supertone Inc. — see [FORK.md](./FORK.md) for the complete fork history and attribution.
+
 VoxBridge is a high-performance, on-device text-to-speech system that runs entirely on your CPU via ONNX Runtime. No cloud calls. No API keys. No paywalled features. No bait and switch.
 
 Forked from the MIT-licensed Supertonic SDK, VoxBridge adds what should have been there from the start: **open expression support** and **production-grade text normalization** — both fully local, both free.
@@ -116,6 +118,8 @@ norm = Normalizer(currency=True, dates=True, phone_numbers=False, time=True)
 pip install 'voxbridge[serve]'
 voxbridge serve --host 127.0.0.1 --port 7788
 ```
+
+**Note on concurrency:** The HTTP server runs in a FastAPI threadpool. Because ONNX Runtime inference sessions are not thread-safe, synthesis is serialized behind a single lock. This means one request at a time per process — slow high-step requests can create queueing. Check `/v1/health` for `queue_depth` and `max_synth_seconds`. If you need more throughput, run multiple single-process instances behind a reverse proxy (nginx/haproxy) and load-balance.
 
 **OpenAI-compatible endpoint** — swap your base URL, done:
 

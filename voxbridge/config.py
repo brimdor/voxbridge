@@ -211,7 +211,15 @@ DEFAULT_SILENCE_DURATION = 0.3  # seconds
 MIN_SPEED = 0.7
 MAX_SPEED = 2.0
 MIN_TOTAL_STEPS = 1
-MAX_TOTAL_STEPS = 100
+# MAX_TOTAL_STEPS — configurable via VOXBRIDGE_MAX_TOTAL_STEPS env var for
+# experimentation with quality/performance trade-offs.
+default_max_steps = os.getenv("VOXBRIDGE_MAX_TOTAL_STEPS", "100")
+try:
+    MAX_TOTAL_STEPS = int(default_max_steps)
+except (ValueError, TypeError):
+    MAX_TOTAL_STEPS = 100
+if MAX_TOTAL_STEPS < 1:
+    MAX_TOTAL_STEPS = 100
 
 # ONNX Runtime configuration
 # TODO: Add parsing of VOXBRIDGE_ONNX_PROVIDERS environment variable
@@ -244,6 +252,11 @@ DEFAULT_INTER_OP_NUM_THREADS = _parse_env_int("VOXBRIDGE_INTER_OP_THREADS")
 
 # Text processing
 MAX_TEXT_LENGTH = 100_000  # Maximum characters per single synthesis call
+
+# Synthesis timeout — configurable for deployments targeting 1-minute audio.
+# Default 60s; set VOXBRIDGE_MAX_SYNTH_SECONDS=0 to disable.
+default_synth_timeout = os.getenv("VOXBRIDGE_MAX_SYNTH_SECONDS", "60")
+MAX_SYNTH_SECONDS = None if default_synth_timeout in ("", "0") else float(default_synth_timeout)
 
 # Logging configuration
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

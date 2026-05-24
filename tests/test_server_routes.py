@@ -88,7 +88,7 @@ class FakeTTS:
 def fake_state(tmp_path):
     fake = FakeTTS()
     state = ServerState(
-        model="voxbridge-3",
+        model="supertonic-3",
         tts=fake,
         custom_styles_dir=tmp_path,
     )
@@ -113,7 +113,7 @@ def test_health_ok(client):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["model"] == "voxbridge-3"
+    assert body["model"] == "supertonic-3"
     assert body["sample_rate"] == SAMPLE_RATE
     assert body["voices_loaded"] == 3  # M1, F1, F2
 
@@ -297,7 +297,7 @@ def test_openai_compat_default_wav(client, fake_state):
     r = client.post(
         "/v1/audio/speech",
         json={
-            "model": "voxbridge-3",
+            "model": "supertonic-3",
             "input": "hello from openai client",
             "voice": "M1",
             "response_format": "wav",
@@ -313,7 +313,7 @@ def test_openai_compat_mp3_rejected(client):
     r = client.post(
         "/v1/audio/speech",
         json={
-            "model": "voxbridge-3",
+            "model": "supertonic-3",
             "input": "hi",
             "voice": "M1",
             "response_format": "mp3",
@@ -326,7 +326,7 @@ def test_openai_compat_mp3_rejected(client):
 def test_openai_compat_model_mismatch(client):
     r = client.post(
         "/v1/audio/speech",
-        json={"model": "voxbridge-2", "input": "hi", "voice": "M1"},
+        json={"model": "supertonic-2", "input": "hi", "voice": "M1"},
     )
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "model_not_loaded"
@@ -410,9 +410,9 @@ def test_default_custom_styles_dir_is_per_model(monkeypatch):
     monkeypatch.delenv("VOXBRIDGE_CUSTOM_STYLES_DIR", raising=False)
     monkeypatch.delenv("VOXBRIDGE_CACHE_DIR", raising=False)
 
-    d3 = styles_store.default_custom_styles_dir("voxbridge-3")
-    d2 = styles_store.default_custom_styles_dir("voxbridge-2")
-    d1 = styles_store.default_custom_styles_dir("voxbridge")
+    d3 = styles_store.default_custom_styles_dir("supertonic-3")
+    d2 = styles_store.default_custom_styles_dir("supertonic-2")
+    d1 = styles_store.default_custom_styles_dir("supertonic")
 
     assert d3.name == "custom_styles"
     assert d3.parent.name == "voxbridge3"
@@ -426,9 +426,9 @@ def test_env_override_wins_over_model_scope(monkeypatch, tmp_path):
 
     monkeypatch.setenv("VOXBRIDGE_CUSTOM_STYLES_DIR", str(tmp_path / "shared"))
     assert (
-        styles_store.default_custom_styles_dir("voxbridge-3")
+        styles_store.default_custom_styles_dir("supertonic-3")
         == tmp_path / "shared"
-        == styles_store.default_custom_styles_dir("voxbridge-2")
+        == styles_store.default_custom_styles_dir("supertonic-2")
     )
 
 
@@ -447,5 +447,5 @@ def test_default_custom_styles_dir_inherits_cache_dir_env_var(monkeypatch, tmp_p
     monkeypatch.delenv("VOXBRIDGE_CUSTOM_STYLES_DIR", raising=False)
     monkeypatch.setenv("VOXBRIDGE_CACHE_DIR", str(tmp_path))
 
-    assert styles_store.default_custom_styles_dir("voxbridge-3") == tmp_path / "custom_styles"
-    assert styles_store.default_custom_styles_dir("voxbridge-2") == tmp_path / "custom_styles"
+    assert styles_store.default_custom_styles_dir("supertonic-3") == tmp_path / "custom_styles"
+    assert styles_store.default_custom_styles_dir("supertonic-2") == tmp_path / "custom_styles"

@@ -18,170 +18,104 @@ from .pipeline import TTS
 logger = logging.getLogger(__name__)
 
 
-def cmd_say(args):
-    """Generate speech and play it directly without saving a file."""
+def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> None:
+    """Common code for cmd_say and cmd_tts: load model, prepare voice, run synthesis."""
     # Setup logging based on verbose flag
     if args.verbose:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     else:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
+    if args.verbose:
+        print(f"🎤 Generating speech: {args.text[:50]}...")
+
+    try:
+        # Initialize TTS
+        print(f"Loading model ({args.model})...")
+        load_start = time.time()
+        tts = TTS(model=args.model)
+        load_time = time.time() - load_start
+        print(f"   -> Model loaded in {load_time:.2f}s")
+
+        # Text processing
+        if args.verbose:
+            print("Processing text...")
+            text_start = time.time()
+            is_valid, unsupported = tts.model.text_processor.validate_text(args.text)
+            preprocessed = tts.model.text_processor._preprocess_text(args.text)
+            text_time = time.time() - text_start
+            print(f"   -> Text processed in {text_time:.3f}s")
+            print(f"   Original: {args.text[:80]}{'...' if len(args.text) > 80 else ''}")
+            if not is_valid:
+                print(f"   ⚠️  Unsupported chars: {unsupported[:10]}")
+            if preprocessed != args.text:
+                print(
+                    f"   Preprocessed: {preprocessed[:80]}{'...' if len(preprocessed) > 80 else ''}"
+                )
+
+        # Get voice style
+        print(f"Loading voice style ({args.custom_style_path or args.voice})...")
+        style_start = time.time()
+        if args.custom_style_path:
+            voice_style = tts.get_voice_style_from_path(args.custom_style_path)
+        else:
+            voice_style = tts.get_voice_style(args.voice)
+        style_time = time.time() - style_start
+        print(f"   -> Voice style loaded in {style_time:.3f}s")
+
+        # Generate speech
+        print(f"Generating speech (lang={args.lang or 'auto'})...")
+        start_time = time.time()
+        wav, duration = tts.synthesize(
+            args.text,
+            voice_style=voice_style,
+            total_steps=args.steps,
+            speed=args.speed,
+            max_chunk_length=args.max_chunk_length,
+            silence_duration=args.silence_duration,
+            lang=args.lang,
+            verbose=args.verbose,
+        )
+        elapsed_time = time.time() - start_time
+        print(f"   -> Speech generated in {elapsed_time:.2f}s")
+
+        if play:
+            import sounddevice as sd
+            print(f"Playing {duration[0]:.2f}s audio...")
+            sd.play(wav.squeeze(), tts.sample_rate)
+            sd.wait()
+            print("   -> Audio played")
+        elif save_path is not None:
+            from .security import validate_path
+            validate_path(save_path)
+            print(f"Saving {duration[0]:.2f}s audio to {save_path}...")
+            tts.save_audio(wav, save_path)
+            print(f"   -> Audio saved to {save_path}")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        if args.verbose:
+            logger.exception("TTS operation failed with exception:")
+        sys.exit(1)
+
+
+def cmd_say(args):
+    """Generate speech and play it directly without saving a file."""
     # Check if sounddevice is installed
     try:
-        import sounddevice as sd
+        import sounddevice as sd  # noqa: F401
     except ImportError:
         print("❌ Error: sounddevice is required for the 'say' command.")
         print("   Install it with: pip install voxbridge[playback]")
         print("   Or: pip install sounddevice")
         sys.exit(1)
 
-    if args.verbose:
-        print(f"🎤 Generating speech: {args.text[:50]}...")
-
-    try:
-        # Initialize TTS
-        print(f"Loading model ({args.model})...")
-        load_start = time.time()
-        tts = TTS(model=args.model)
-        load_time = time.time() - load_start
-        print(f"   -> Model loaded in {load_time:.2f}s")
-
-        # Text processing
-        if args.verbose:
-            print("Processing text...")
-            text_start = time.time()
-
-            # Show text validation
-            is_valid, unsupported = tts.model.text_processor.validate_text(args.text)
-            # Show preprocessed text
-            preprocessed = tts.model.text_processor._preprocess_text(args.text)
-
-            text_time = time.time() - text_start
-            print(f"   -> Text processed in {text_time:.3f}s")
-
-            print(f"   Original: {args.text[:80]}{'...' if len(args.text) > 80 else ''}")
-            if not is_valid:
-                print(f"   ⚠️  Unsupported chars: {unsupported[:10]}")
-            if preprocessed != args.text:
-                print(
-                    f"   Preprocessed: {preprocessed[:80]}{'...' if len(preprocessed) > 80 else ''}"
-                )
-
-        # Get voice style
-        print(f"Loading voice style ({args.custom_style_path or args.voice})...")
-        style_start = time.time()
-        if args.custom_style_path:
-            voice_style = tts.get_voice_style_from_path(args.custom_style_path)
-        else:
-            voice_style = tts.get_voice_style(args.voice)
-        style_time = time.time() - style_start
-        print(f"   -> Voice style loaded in {style_time:.3f}s")
-
-        # Generate speech
-        print(f"Generating speech (lang={args.lang or 'auto'})...")
-        start_time = time.time()
-        wav, duration = tts.synthesize(
-            args.text,
-            voice_style=voice_style,
-            total_steps=args.steps,
-            speed=args.speed,
-            max_chunk_length=args.max_chunk_length,
-            silence_duration=args.silence_duration,
-            lang=args.lang,
-            verbose=args.verbose,
-        )
-        elapsed_time = time.time() - start_time
-        print(f"   -> Speech generated in {elapsed_time:.2f}s")
-
-        # Play audio directly
-        print(f"Playing {duration[0]:.2f}s audio...")
-        sd.play(wav.squeeze(), tts.sample_rate)
-        sd.wait()  # Wait until audio is finished playing
-        print("   -> Audio played")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        if args.verbose:
-            logger.exception("TTS playback failed with exception:")
-        sys.exit(1)
+    _shared_synth(args, play=True)
 
 
 def cmd_tts(args):
     """Generate speech from text using TTS."""
-    # Setup logging based on verbose flag
-    if args.verbose:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    else:
-        logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
-    if args.verbose:
-        print(f"🎤 Generating speech: {args.text[:50]}...")
-
-    try:
-        # Initialize TTS
-        print(f"Loading model ({args.model})...")
-        load_start = time.time()
-        tts = TTS(model=args.model)
-        load_time = time.time() - load_start
-        print(f"   -> Model loaded in {load_time:.2f}s")
-
-        # Text processing
-        if args.verbose:
-            print("Processing text...")
-            text_start = time.time()
-
-            # Show text validation
-            is_valid, unsupported = tts.model.text_processor.validate_text(args.text)
-            # Show preprocessed text
-            preprocessed = tts.model.text_processor._preprocess_text(args.text)
-
-            text_time = time.time() - text_start
-            print(f"   -> Text processed in {text_time:.3f}s")
-
-            print(f"   Original: {args.text[:80]}{'...' if len(args.text) > 80 else ''}")
-            if not is_valid:
-                print(f"   ⚠️  Unsupported chars: {unsupported[:10]}")
-            if preprocessed != args.text:
-                print(
-                    f"   Preprocessed: {preprocessed[:80]}{'...' if len(preprocessed) > 80 else ''}"
-                )
-
-        # Get voice style
-        print(f"Loading voice style ({args.custom_style_path or args.voice})...")
-        style_start = time.time()
-        if args.custom_style_path:
-            voice_style = tts.get_voice_style_from_path(args.custom_style_path)
-        else:
-            voice_style = tts.get_voice_style(args.voice)
-        style_time = time.time() - style_start
-        print(f"   -> Voice style loaded in {style_time:.3f}s")
-
-        # Generate speech
-        print(f"Generating speech (lang={args.lang or 'auto'})...")
-        start_time = time.time()
-        wav, duration = tts.synthesize(
-            args.text,
-            voice_style=voice_style,
-            total_steps=args.steps,
-            speed=args.speed,
-            max_chunk_length=args.max_chunk_length,
-            silence_duration=args.silence_duration,
-            lang=args.lang,
-            verbose=args.verbose,
-        )
-        elapsed_time = time.time() - start_time
-        print(f"   -> Speech generated in {elapsed_time:.2f}s")
-
-        # Save audio
-        print(f"Saving {duration[0]:.2f}s audio to {args.output}...")
-        tts.save_audio(wav, args.output)
-        print(f"   -> Audio saved to {args.output}")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        if args.verbose:
-            logger.exception("TTS generation failed with exception:")
-        sys.exit(1)
+    _shared_synth(args, save_path=args.output)
 
 
 def cmd_list_voices(args):

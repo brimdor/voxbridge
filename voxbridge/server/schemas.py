@@ -121,6 +121,8 @@ class HealthResponse(BaseModel):
     sample_rate: Optional[int] = None
     version: str
     voices_loaded: int = 0
+    queue_depth: int = Field(0, description="Number of synthesis requests currently waiting (0 = idle; if >0, synthesis is single-threaded and waiting).")
+    max_synth_seconds: Optional[float] = Field(None, description="Configured synthesis timeout in seconds, or null if disabled.")
 
 
 class ErrorDetail(BaseModel):

@@ -81,7 +81,19 @@ _ABBREVIATIONS = {
     "ram": "RAM", "ssd": "SSD", "usb": "USB", "wifi": "WiFi",
 }
 
+# Pre-compile abbreviation regexes once at module load — avoids recompiling
+# on every call to Normalizer.normalize().
+_ABBREVIATION_PATTERNS = [
+    (re.compile(re.escape(abbr), re.IGNORECASE), expansion)
+    for abbr, expansion in _ABBREVIATIONS.items()
+]
 
+# Pre-compile abbreviation regexes once at module load — avoids recompiling
+# on every call to Normalizer.normalize().
+_ABBREVIATION_PATTERNS = [
+    (re.compile(re.escape(abbr), re.IGNORECASE), expansion)
+    for abbr, expansion in _ABBREVIATIONS.items()
+]
 def _number_to_words(n: int) -> str:
     """Convert an integer to its English word representation."""
     if n < 0:
@@ -443,8 +455,7 @@ class Normalizer:
     # --- Abbreviations ---
 
     def _expand_abbreviations(self, text: str) -> str:
-        """Expand common abbreviations."""
-        # Case-insensitive expansion
-        for abbr, expansion in _ABBREVIATIONS.items():
-            text = re.sub(re.escape(abbr), expansion, text, flags=re.IGNORECASE)
+        """Expand common abbreviations using pre-compiled regexes."""
+        for pattern, expansion in _ABBREVIATION_PATTERNS:
+            text = pattern.sub(expansion, text)
         return text
