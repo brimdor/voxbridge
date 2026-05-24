@@ -51,7 +51,7 @@ from .pipeline import TTS
 from .normalizer import Normalizer
 from .expressions import ExpressionProcessor
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "TTS",
