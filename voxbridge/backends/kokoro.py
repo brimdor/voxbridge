@@ -158,6 +158,23 @@ def _try_download() -> None:
         )
 
 
+def _apply_fade_out(wav: np.ndarray, sr: int, duration_ms: int) -> np.ndarray:
+    """Apply a short linear fade-out to the last ``duration_ms`` of a mono waveform.
+
+    This masks Kokoro's phrase-ending energy dip / rebound artifact.
+    """
+    if wav.ndim != 2 or wav.shape[0] != 1:
+        return wav  # guard against unexpected shapes
+    fade_samples = int(sr * duration_ms / 1000)
+    if fade_samples >= wav.shape[1]:
+        return wav  # too short to fade
+    tail = wav[:, -fade_samples:]
+    taper = np.linspace(1.0, 0.82, fade_samples, dtype=wav.dtype)
+    tail *= taper[np.newaxis, :]  # match (1, N)
+    wav = np.concatenate([wav[:, :-fade_samples], tail], axis=1)
+    return wav
+
+
 class KokoroBackend(TTSBackend):
     """Kokoro-ONNX backend.
 
@@ -198,6 +215,7 @@ class KokoroBackend(TTSBackend):
         *,
         speed: float = 1.0,
         lang: str | None = "en",
+        fade_ending: bool = True,
     ) -> np.ndarray:
         if self._kokoro is None:
             raise RuntimeError("KokoroBackend not loaded. Call .load() first.")
@@ -209,6 +227,8 @@ class KokoroBackend(TTSBackend):
         audio, _sr = kokoro.create(text=text, voice=internal, speed=speed, lang=kokoro_lang)
         if audio.ndim == 1:
             audio = audio[np.newaxis, :]
+        if fade_ending:
+            audio = _apply_fade_out(audio, sr=self.sample_rate, duration_ms=120)
         return audio
 
     def list_voices(self) -> list[VoiceInfo]:

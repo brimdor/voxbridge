@@ -425,6 +425,7 @@ class TTS:
         silence_duration: float,
         expression_tags: list,
         verbose: bool,
+        fade_ending: bool = True,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Internal Kokoro synthesis path."""
         from .backends.kokoro import KOKORO_VOICE_MAP
@@ -443,7 +444,7 @@ class TTS:
             print(f"🎙️  Kokoro synthesizing: '{text[:60]}...' voice={voice}")
 
         backend = self._backend  # type: ignore[no-untyped-call]
-        wav = backend.synthesize(text=text, voice=voice, speed=speed, lang="en-us")
+        wav = backend.synthesize(text=text, voice=voice, speed=speed, lang="en-us", fade_ending=fade_ending)
 
         # Apply expression processing post-synthesis
         if self.expression_processor and expression_tags:

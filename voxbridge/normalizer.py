@@ -107,7 +107,7 @@ def _number_to_words(n: int) -> str:
     if n < 1000:
         if n % 100 == 0:
             return _ONES[n // 100] + " hundred"
-        return _ONES[n // 100] + " " + _number_to_words(n % 100)
+        return _ONES[n // 100] + " hundred " + _number_to_words(n % 100)
     if n < 1_000_000:
         if n % 1000 == 0:
             return _number_to_words(n // 1000) + " thousand"
