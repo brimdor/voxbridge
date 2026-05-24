@@ -18,6 +18,10 @@ import numpy as np
 
 from . import TTSBackend, VoiceInfo
 
+# Suppress noisy phonemizer/espeak word-count mismatch warnings.
+# These fire on virtually every English sentence and provide no value.
+logging.getLogger("phonemizer").setLevel(logging.ERROR)
+
 logger = logging.getLogger(__name__)
 
 # Default voice mapping: human name → kokoro internal id.

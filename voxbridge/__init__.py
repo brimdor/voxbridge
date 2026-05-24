@@ -32,12 +32,22 @@ Example:
 
     tts.save_audio(wav, "output.wav")
     ```
+
+One-shot convenience (creates/disposes a temporary TTS instance):
+    ```python
+    from voxbridge import synthesize, save_audio
+    wav, dur = synthesize("Hello world!", voice="bella", provider="kokoro")
+    save_audio(wav, "hello.wav", sample_rate=44100)
+    ```
 """
 
 from __future__ import annotations
 
 import logging
 
+import numpy as np
+
+from .backends import build_backend, get_provider, list_providers
 from .config import (
     AVAILABLE_LANGUAGES,
     AVAILABLE_MODELS,
@@ -47,11 +57,83 @@ from .config import (
     UNKNOWN_LANGUAGE,
 )
 from .core import Style, UnicodeProcessor
-from .pipeline import TTS
-from .normalizer import Normalizer
 from .expressions import ExpressionProcessor
+from .normalizer import Normalizer
+from .pipeline import TTS
 
-__version__ = "0.2.0"
+
+def synthesize(
+    text: str,
+    voice: str = "bella",
+    provider: str = "kokoro",
+    *,
+    speed: float = 1.0,
+    lang: str | None = "en",
+    model: str = DEFAULT_MODEL,
+    total_steps: int = 8,
+    expressions: bool = True,
+    normalizer: bool = True,
+) -> tuple[np.ndarray, float]:
+    """One-shot speech synthesis. Creates a temporary TTS instance.
+
+    Args:
+        text: Text to synthesize.
+        voice: Voice name (e.g. ``'bella'``, ``'sky'``, ``'M1'``).
+        provider: ``'kokoro'`` or ``'supertone'``.
+        speed: Speech-rate multiplier (default 1.0).
+        lang: Language code. ``None`` for auto / ``'na'`` fallback.
+        model: Supertone model name (only used when provider='supertone').
+        total_steps: Quality steps (Supertone only).
+        expressions: Enable expression tag processing.
+        normalizer: Enable text normalization.
+
+    Returns:
+        Tuple of ``(waveform, duration_seconds)``.
+    """
+    tts = TTS(
+        model=model,
+        provider=provider,
+        normalizer=normalizer,
+        expressions=expressions,
+    )
+    voice_style = voice if provider == "kokoro" else tts.get_voice_style(voice)
+    return tts.synthesize(
+        text,
+        voice_style=voice_style,
+        speed=speed,
+        lang=lang,
+        total_steps=total_steps,
+    )
+
+
+def save_audio(
+    wav: np.ndarray,
+    output_path: str,
+    sample_rate: int = 44100,
+) -> None:
+    """Save a waveform to a WAV file.
+
+    Args:
+        wav: Audio array of shape ``(1, N)`` or ``(N,)``.
+        output_path: Destination file path.
+        sample_rate: Sample rate in Hz (default 44100).
+    """
+    try:
+        import soundfile as sf  # type: ignore[import-untyped]
+    except ImportError as e:
+        raise ImportError(
+            "soundfile library is required to save audio. "
+            "Install it with: pip install soundfile"
+        ) from e
+
+    from pathlib import Path
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(out), wav.squeeze(), sample_rate)
+
+
+__version__ = "0.2.2"
 
 __all__ = [
     "TTS",
@@ -66,6 +148,11 @@ __all__ = [
     "SUPPORTED_LANGUAGES",
     "UNKNOWN_LANGUAGE",
     "__version__",
+    "list_providers",
+    "get_provider",
+    "build_backend",
+    "synthesize",
+    "save_audio",
 ]
 
 # Configure logging

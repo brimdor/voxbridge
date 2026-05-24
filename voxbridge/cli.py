@@ -26,8 +26,16 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
     else:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
+    # Resolve text: positional arg > stdin > error
+    text = args.text
+    if text is None and not sys.stdin.isatty():
+        text = sys.stdin.read().strip()
+    if not text:
+        print("❌ Error: no text provided. Pass TEXT as argument, pipe via stdin, or use --help.")
+        sys.exit(1)
+
     if args.verbose:
-        print(f"🎤 Generating speech: {args.text[:50]}...")
+        print(f"🎤 Generating speech: {text[:50]}...")
 
     try:
         # Initialize TTS
@@ -50,14 +58,14 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
         if args.verbose and hasattr(tts, 'model') and tts.model is not None:
             print("Processing text...")
             text_start = time.time()
-            is_valid, unsupported = tts.model.text_processor.validate_text(args.text)
-            preprocessed = tts.model.text_processor._preprocess_text(args.text)
+            is_valid, unsupported = tts.model.text_processor.validate_text(text)
+            preprocessed = tts.model.text_processor._preprocess_text(text)
             text_time = time.time() - text_start
             print(f"   -> Text processed in {text_time:.3f}s")
-            print(f"   Original: {args.text[:80]}{'...' if len(args.text) > 80 else ''}")
+            print(f"   Original: {text[:80]}{'...' if len(text) > 80 else ''}")
             if not is_valid:
                 print(f"   ⚠️  Unsupported chars: {unsupported[:10]}")
-            if preprocessed != args.text:
+            if preprocessed != text:
                 print(
                     f"   Preprocessed: {preprocessed[:80]}{'...' if len(preprocessed) > 80 else ''}"
                 )
@@ -83,7 +91,7 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
         print(f"Generating speech (lang={args.lang or 'auto'})...")
         start_time = time.time()
         wav, duration = tts.synthesize(
-            args.text,
+            text,
             voice_style=voice_style,
             total_steps=args.steps,
             speed=args.speed,
@@ -95,6 +103,7 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
         elapsed_time = time.time() - start_time
         print(f"   -> Speech generated in {elapsed_time:.2f}s")
 
+        did_play = False
         if play:
             import sounddevice as sd
             dur_val = duration.item() if hasattr(duration, "item") else float(duration)
@@ -102,13 +111,17 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
             sd.play(wav.squeeze(), tts.sample_rate)
             sd.wait()
             print("   -> Audio played")
-        elif save_path is not None:
+            did_play = True
+        if save_path is not None:
             from .security import validate_path
             validate_path(save_path)
             dur_val = duration.item() if hasattr(duration, "item") else float(duration)
             print(f"Saving {dur_val:.2f}s audio to {save_path}...")
             tts.save_audio(wav, save_path)
             print(f"   -> Audio saved to {save_path}")
+        if not did_play and save_path is None:
+            # Should not reach here, but just in case
+            raise RuntimeError("Neither play nor save_path was specified.")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -118,7 +131,7 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
 
 
 def cmd_say(args):
-    """Generate speech and play it directly without saving a file."""
+    """Generate speech and play it directly (or save with --output)."""
     # Check if sounddevice is installed
     try:
         import sounddevice as sd  # noqa: F401
@@ -128,7 +141,7 @@ def cmd_say(args):
         print("   Or: pip install sounddevice")
         sys.exit(1)
 
-    _shared_synth(args, play=True)
+    _shared_synth(args, play=True, save_path=getattr(args, 'output', None))
 
 
 def cmd_tts(args):
@@ -305,9 +318,10 @@ Examples:
 
     # Say command (play audio directly without saving)
     parser_say = subparsers.add_parser(
-        "say", help="Generate speech and play it directly without saving a file"
+        "say", help="Generate speech and play it directly (or save with --output)"
     )
-    parser_say.add_argument("text", help="Text to synthesize and play")
+    parser_say.add_argument("text", nargs="?", default=None, help="Text to synthesize and play. If omitted, reads from stdin.")
+    parser_say.add_argument("-o", "--output", default=None, help="Also save audio to a WAV file (optional)")
     parser_say.add_argument(
         "--provider",
         type=str,
@@ -325,7 +339,7 @@ Examples:
             f"or supertonic-3 (31 languages + 'na' fallback). Default: {DEFAULT_MODEL}"
         ),
     )
-    parser_say.add_argument("--voice", default="M1", help="Voice style (default: M1).  For kokoro, use names like 'bella', 'echo', 'adam'.")
+    parser_say.add_argument("--voice", default="M1", help="Voice style (default: M1).  For kokoro, use names like 'bella', 'sky', 'heart', 'adam'.  Run 'voxbridge list-voices --provider kokoro' to see all 53 voices.")
     parser_say.add_argument(
         "--custom-style-path",
         type=str,
@@ -383,7 +397,7 @@ Examples:
 
     # TTS command
     parser_tts = subparsers.add_parser("tts", aliases=["t"], help="Generate speech from text")
-    parser_tts.add_argument("text", help="Text to synthesize")
+    parser_tts.add_argument("text", nargs="?", default=None, help="Text to synthesize. If omitted, reads from stdin (requires --output).")
     parser_tts.add_argument("-o", "--output", required=True, help="Output WAV file")
     parser_tts.add_argument(
         "--provider",
@@ -402,7 +416,7 @@ Examples:
             f"or supertonic-3 (31 languages + 'na' fallback). Default: {DEFAULT_MODEL}"
         ),
     )
-    parser_tts.add_argument("--voice", default="M1", help="Voice style (default: M1).  For kokoro, use names like 'bella', 'echo', 'adam'.")
+    parser_tts.add_argument("--voice", default="M1", help="Voice style (default: M1).  For kokoro, use names like 'bella', 'sky', 'heart', 'adam'.  Run 'voxbridge list-voices --provider kokoro' to see all 53 voices.")
     parser_tts.add_argument(
         "--custom-style-path",
         type=str,
