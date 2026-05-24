@@ -12,7 +12,7 @@ import sys
 import time
 
 from . import __version__
-from .config import AVAILABLE_LANGUAGES, AVAILABLE_MODELS, DEFAULT_MODEL
+from .config import AVAILABLE_LANGUAGES, AVAILABLE_MODELS, DEFAULT_MODEL, DEFAULT_SPEED
 from .pipeline import TTS
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,10 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     else:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+
+    # Re-suppress phonemizer after basicConfig (which may re-enable child loggers).
+    # This ensures the warning stays silenced regardless of CLI entry point.
+    logging.getLogger("phonemizer").setLevel(logging.ERROR)
 
     # Resolve text: positional arg > stdin > error
     text = args.text
@@ -367,8 +371,8 @@ Examples:
     parser_say.add_argument(
         "--speed",
         type=float,
-        default=1.05,
-        help="Speech speed (0.7-2.0, default: 1.05, 2.0=2x faster)",
+        default=DEFAULT_SPEED,
+        help=f"Speech speed (0.7-2.0, default: {DEFAULT_SPEED}, 2.0=2x faster)",
     )
     parser_say.add_argument(
         "--max-chunk-length",
@@ -444,8 +448,8 @@ Examples:
     parser_tts.add_argument(
         "--speed",
         type=float,
-        default=1.05,
-        help="Speech speed (0.7-2.0, default: 1.05, 2.0=2x faster)",
+        default=DEFAULT_SPEED,
+        help=f"Speech speed (0.7-2.0, default: {DEFAULT_SPEED}, 2.0=2x faster)",
     )
     parser_tts.add_argument(
         "--max-chunk-length",

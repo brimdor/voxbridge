@@ -272,9 +272,9 @@ class TTS:
             verbose: If True, print detailed progress information (default: False)
 
         Returns:
-            Tuple of (waveform, duration):
+            Tuple of (waveform, sample_rate):
                 - waveform: Audio array of shape (1, num_samples)
-                - duration: Total duration in seconds
+                - sample_rate: Sample rate in Hz (int)
         """
         # Validate inputs
         if not text or not text.strip():

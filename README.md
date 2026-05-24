@@ -54,7 +54,7 @@ No TTS instance needed — use the top-level convenience functions:
 from voxbridge import synthesize, save_audio
 
 # Generate and save in two lines
-wav, dur = synthesize("Hello world!", voice="sky", provider="kokoro", speed=0.95)
+wav, sr = synthesize("Hello world!", voice="sky", provider="kokoro", speed=0.95)
 save_audio(wav, "hello.wav", sample_rate=44100)
 ```
 
@@ -78,7 +78,7 @@ tts = TTS()
 style = tts.get_voice_style("M1")
 
 # Simple synthesis
-wav, duration = tts.synthesize("Welcome to VoxBridge!", voice_style=style, lang="en")
+wav, sr = tts.synthesize("Welcome to VoxBridge!", voice_style=style, lang="en")
 tts.save_audio(wav, "output.wav")
 
 # Multilingual: Korean, English, French, etc.
@@ -95,12 +95,12 @@ from voxbridge import TTS
 tts = TTS(provider="kokoro")
 
 # Human-readable voice names (no JSON loading needed)
-wav, dur = tts.synthesize("Hello world!", voice_style="bella")
-wav, dur = tts.synthesize("Good afternoon.", voice_style="adam")
-wav, dur = tts.synthesize("Nice to meet you.", voice_style="echo")
+wav, sr = tts.synthesize("Hello world!", voice_style="bella")
+wav, sr = tts.synthesize("Good afternoon.", voice_style="adam")
+wav, sr = tts.synthesize("Nice to meet you.", voice_style="echo")
 
 # Speed control (0.7–2.0, default 1.0)
-wav, dur = tts.synthesize(
+wav, sr = tts.synthesize(
     "This is a longer sentence with natural prosody.",
     voice_style="bella",
     speed=0.95,  # Slightly slower for maximum naturalness
@@ -115,13 +115,13 @@ from voxbridge import TTS
 tts = TTS(provider="kokoro")
 
 # Automatically expands: $12,458.75 → "twelve thousand four hundred fifty eight dollars and seventy five cents"
-wav, dur = tts.synthesize(
+wav, sr = tts.synthesize(
     "Your balance is $12,458.75, due on June 15, 2026.",
     voice_style="bella",
 )
 
 # Automatically expands: 5:30 p.m. → "five thirty PM"
-wav, dur = tts.synthesize(
+wav, sr = tts.synthesize(
     "Your appointment is at 5:30 p.m.",
     voice_style="bella",
 )
@@ -150,7 +150,7 @@ Expressions are **provider-aware**: what sounds good on Supertone's pitch-variab
 
 ```python
 tts = TTS(provider="kokoro")
-wav, dur = tts.synthesize(
+wav, sr = tts.synthesize(
     "Hello <breath/> how are you? <pause/> I'm doing great today.",
     voice_style="bella",
 )

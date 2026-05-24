@@ -59,7 +59,7 @@ class FakeTTS:
         text: str,
         voice_style,
         total_steps: int = 8,
-        speed: float = 1.05,
+        speed: float = 1.0,
         max_chunk_length=None,
         silence_duration: float = 0.3,
         lang=None,

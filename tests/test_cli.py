@@ -72,7 +72,7 @@ def test_create_parser():
     assert args.output == "test.wav"
     assert args.voice == "M1"  # default
     assert args.steps == 8  # default
-    assert args.speed == 1.05  # default
+    assert args.speed == 1.0  # DEFAULT_SPEED
 
 
 def test_parser_with_options():

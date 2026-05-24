@@ -133,7 +133,7 @@ def save_audio(
     sf.write(str(out), wav.squeeze(), sample_rate)
 
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 __all__ = [
     "TTS",

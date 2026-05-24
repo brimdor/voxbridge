@@ -4,7 +4,16 @@ All notable changes to VoxBridge are documented in this file.
 
 ## [Unreleased]
 
-No changes yet.
+## [0.2.3] - 2026-05-25
+
+### Fixed
+- **Phonemizer warning via `python3 -m`**: `"words count mismatch"` warning from phonemizer/espeak still appeared when running via `python3 -m voxbridge`. Now suppressed in `__main__.py` before any imports AND re-applied after `logging.basicConfig()` in CLI entry points.
+- **CLI `--speed` default**: Was hardcoded to `1.05` in both `say` and `tts` commands despite `DEFAULT_SPEED` being `1.0`. Now uses `DEFAULT_SPEED` from config.
+- **README code examples**: Updated all `synthesize()` return-value examples from `wav, dur` to `wav, sr` to match the v0.2.2 `(audio, sample_rate)` return signature.
+- **TTS.synthesize() docstring**: Return tuple documented as `(waveform, duration)` instead of `(waveform, sample_rate)` — now correctly documented.
+
+### Internal
+- `__main__.py` now has proper Python module header with phonemizer early suppression.
 
 ## [0.2.2] - 2026-05-24
 
