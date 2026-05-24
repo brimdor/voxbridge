@@ -7,6 +7,7 @@ originally developed by [Supertone Inc.](https://supertone.ai/) and distributed 
 
 VoxBridge extends the original Supertonic SDK with:
 
+- **Pluggable backends** (`voxbridge.backends`): `TTSBackend` protocol with `KokoroBackend` (54 voices, best English) and `SupertoneBackend` (31 languages).
 - **Text normalization** (`voxbridge.normalizer`): Pre-processes currencies, dates, times, phone numbers, ordinals, and abbreviations for cleaner TTS output.
 - **Open expression system** (`voxbridge.expressions`): Parse and apply prosody/expression tags like `<laugh>`, `<breath>`, `<sigh>`, `<pause>`, `<whisper>`, `<shout>`, `<cough>`, `<groan>`, `<gasp>`, `<chuckle>` — all processed locally with numpy, no external API.
 - **Security hardening** (`voxbridge.security`): Input sanitization, rate limiting, CORS defaults, security headers, request size limits, and path traversal prevention for the FastAPI server.
@@ -26,6 +27,10 @@ VoxBridge extends the original Supertonic SDK with:
 |---------|-------|
 | 1.3.1 | Original Supertonic SDK (upstream) |
 | 0.1.0 | First VoxBridge fork release |
+| 0.2.0 | Security hardening, expression system, normalizer |
+| 0.2.1 | Pluggable backends (Kokoro + Supertone), resampling, fade-out |
+| 0.2.2 | One-shot API, stdin CLI, phonemizer suppression |
+| 0.2.3 | Phonemizer fix via python3 -m, CLI --speed default, docs sync |
 
 ## License
 

@@ -15,7 +15,7 @@ Thank you for your interest in making VoxBridge better! This project is a fork o
    ```
 4. Make your changes.
 5. Add tests for any new code.
-6. Run the full test suite again to verify.
+6. Run the full test suite again to verify (188 tests as of v0.2.x).
 7. Submit a pull request.
 
 ## Code Style
