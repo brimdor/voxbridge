@@ -86,15 +86,22 @@ def _error(status_code: int, message: str, code: str, type_: str = "invalid_requ
 
 
 def _resolve_voice(state: "ServerState", voice_name: str):
-    """Return a ``Style`` for ``voice_name`` from built-ins or imported custom styles.
+    """Return voice for synthesis — a Style (Supertone) or voice name string (Kokoro).
 
-    Built-ins are checked first; this is structurally equivalent to checking
-    custom first because :func:`styles_store.save` refuses to write a custom
-    name that collides with the model's built-ins.
+    Built-ins are checked first; custom styles checked second.
     """
     tts = state.tts
     if tts is None:
-        raise RuntimeError("server not ready")  # caller maps to 503
+        raise RuntimeError("server not ready")
+
+    # Kokoro provider: voice names are just strings
+    if state.provider == "kokoro":
+        from ..backends.kokoro import KOKORO_VOICE_MAP
+        if voice_name in KOKORO_VOICE_MAP:
+            return voice_name
+        raise UnknownVoice(voice_name)
+
+    # Supertone provider: resolve to Style objects
     if voice_name in tts.voice_style_names:
         return tts.get_voice_style(voice_name)
     custom_path = state.custom_styles.get(voice_name)

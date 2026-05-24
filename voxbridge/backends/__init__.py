@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 @dataclass
 class VoiceInfo:
     """Metadata for a single voice."""
+
     name: str
     language: str
     gender: str | None = None
@@ -34,13 +35,19 @@ class TTSBackend(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Provider slug -- e.g. ``'kokoro'``, ``'supertone'``."""
+        """Provider slug — e.g. ``'kokoro'``, ``'supertone'``."""
         ...
 
     @property
     @abstractmethod
     def sample_rate(self) -> int:
         """Audio sample rate in Hz."""
+        ...
+
+    @property
+    @abstractmethod
+    def voice_style_names(self) -> list[str]:
+        """Human-readable voice names available on this provider."""
         ...
 
     @abstractmethod
@@ -83,18 +90,11 @@ class TTSBackend(ABC):
     # -- optional hooks for advanced features --
 
     def get_voice_style(self, name: str):
-        """Optional: return a Style-like object for compatibility.
-
-        Default returns a simple duck-typed dict holding ``provider`` and
-        ``name``.  Override if the provider has typed style objects.
-        """
+        """Return a duck-typed dict holding ``provider`` and ``name``."""
         return {"provider": self.name, "name": name}
 
     def supports_lang(self, lang: str) -> bool:
-        """Whether this provider can synthesise in ``lang``.
-
-        Default returns ``True`` (trust the caller).
-        """
+        """Whether this provider can synthesise in ``lang``.  Default ``True``."""
         return True
 
 
@@ -125,17 +125,20 @@ def list_providers() -> list[str]:
     return list(_REGISTRY)
 
 
-# ---------------------------------------------------------------------------
-# Convenience: build a ready-to-use backend instance
-# ---------------------------------------------------------------------------
-
-def build_backend(
-    name: str, *,
-    normalizer: "Normalizer | None" = None,
-    expressions: "ExpressionProcessor | None" = None,
-) -> TTSBackend:
+def build_backend(name: str) -> TTSBackend:
     """Instantiate and ``.load()`` a backend by name."""
     cls = get_provider(name)
-    instance = cls(normalizer=normalizer, expressions=expressions)
+    instance = cls()
     instance.load()
     return instance
+
+
+# ---------------------------------------------------------------------------
+# Auto-register built-in backends
+# ---------------------------------------------------------------------------
+
+from .kokoro import KokoroBackend  # noqa: E402
+from .supertone import SupertoneBackend  # noqa: E402
+
+register_provider("kokoro", KokoroBackend)
+register_provider("supertone", SupertoneBackend)

@@ -49,7 +49,8 @@ class OpenAISpeechRequest(BaseModel):
 
     @classmethod
     def valid_models(cls) -> tuple[str, ...]:
-        return tuple(AVAILABLE_MODELS)
+        from ..config import AVAILABLE_MODELS
+        return tuple(AVAILABLE_MODELS) + ("kokoro",)
 
 
 class BatchItem(BaseModel):
