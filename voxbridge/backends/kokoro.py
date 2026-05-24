@@ -220,7 +220,7 @@ class KokoroBackend(TTSBackend):
         speed: float = 1.0,
         lang: str | None = "en",
         fade_ending: bool = True,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, int]:
         if self._kokoro is None:
             raise RuntimeError("KokoroBackend not loaded. Call .load() first.")
         internal = KOKORO_VOICE_MAP.get(voice, voice)
@@ -233,7 +233,7 @@ class KokoroBackend(TTSBackend):
             audio = audio[np.newaxis, :]
         if fade_ending:
             audio = _apply_fade_out(audio, sr=self.sample_rate, duration_ms=120)
-        return audio
+        return audio, self.sample_rate
 
     def list_voices(self) -> list[VoiceInfo]:
         if self._kokoro is None:

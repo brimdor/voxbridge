@@ -63,8 +63,8 @@ class TTSBackend(ABC):
         *,
         speed: float = 1.0,
         lang: str | None = "en",
-    ) -> np.ndarray:
-        """Return a mono audio waveform as a ``np.ndarray`` of shape ``(1, N)``.
+    ) -> tuple[np.ndarray, int]:
+        """Return audio waveform + sample rate.
 
         Args:
             text: Clean text after normalization/expression extraction.
@@ -73,7 +73,8 @@ class TTSBackend(ABC):
             lang: Language code, or ``None`` if not applicable.
 
         Returns:
-            Audio array with shape ``(1, num_samples)``.
+            Tuple of ``(audio_array, sample_rate)`` where audio is a 1-D
+            ``np.ndarray`` of shape ``(num_samples,)`` and sample_rate is in Hz.
         """
         ...
 

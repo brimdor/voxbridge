@@ -80,8 +80,7 @@ class FakeTTS:
         # to verify the duration header rounds sensibly.
         n = int(SAMPLE_RATE * 0.1)
         wav = np.zeros((1, n), dtype=np.float32)
-        duration = np.array([0.1], dtype=np.float32)
-        return wav, duration
+        return wav, SAMPLE_RATE
 
 
 @pytest.fixture

@@ -82,22 +82,22 @@ class TTS:
         expression_processor (ExpressionProcessor): Expression processor (or None if disabled)
 
     Example:
-        ```python
-        from voxbridge import TTS
+    ```python
+    from voxbridge import TTS
 
-        # Use default model (supertonic-3 with 31-language support)
-        tts = TTS()
-        style = tts.get_voice_style("M1")
-        wav, dur = tts.synthesize("Hello!", voice_style=style, lang="en")
+    # Use default model (supertonic-3 with 31-language support)
+    tts = TTS()
+    style = tts.get_voice_style("M1")
+    wav, sr = tts.synthesize("Hello!", voice_style=style, lang="en")
 
-        # Use Kokoro backend with human-readable voice names
-        tts_k = TTS(provider="kokoro")
-        wav, dur = tts_k.synthesize("Hello!", voice_style="bella", lang="en")
+    # Use Kokoro backend with human-readable voice names
+    tts_k = TTS(provider="kokoro")
+    wav, sr = tts_k.synthesize("Hello!", voice_style="bella", lang="en")
 
-        # With text normalization and expressions
-        tts = TTS(normalizer=True, expressions=True)
-        wav, dur = tts.synthesize("Meeting at 5:30 PM <laugh/>", voice_style=style, lang="en")
-        ```
+    # With text normalization and expressions
+    tts = TTS(normalizer=True, expressions=True)
+    wav, sr = tts.synthesize("Meeting at 5:30 PM <laugh/>", voice_style=style, lang="en")
+    ```
     """
 
     def __init__(
@@ -252,7 +252,7 @@ class TTS:
         silence_duration: float = DEFAULT_SILENCE_DURATION,
         lang: Optional[str] = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, int]:
         """Synthesize speech from text.
 
         This method automatically chunks long text into smaller segments
@@ -407,18 +407,17 @@ class TTS:
         if self.expression_processor and expression_tags:
             wav_cat = self.expression_processor.apply(wav_cat, expression_tags, self.sample_rate)
 
-        total_audio_dur = sum(float(d.item()) for d in dur_list)
-        total_silence_dur = float(silence_duration * (len(wav_list) - 1))
-        dur_cat = total_audio_dur + total_silence_dur
-
         if verbose:
             total_samples = wav_cat.shape[1]
+            total_audio_dur = sum(float(d.item()) for d in dur_list)
+            total_silence_dur = float(silence_duration * (len(wav_list) - 1))
+            dur_cat = total_audio_dur + total_silence_dur
             print("Generation complete!")
             print(f"Total duration: {dur_cat:.2f}s")
             print(f"Total samples: {total_samples:,}")
             print(f"Array shape: {wav_cat.shape}")
 
-        return wav_cat, dur_cat
+        return wav_cat, self.sample_rate
 
     def _synthesize_kokoro(
         self,
@@ -429,7 +428,7 @@ class TTS:
         expression_tags: list,
         verbose: bool,
         fade_ending: bool = True,
-    ) -> tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, int]:
         """Internal Kokoro synthesis path."""
         from .backends.kokoro import KOKORO_VOICE_MAP
 
@@ -447,7 +446,7 @@ class TTS:
             print(f"🎙️  Kokoro synthesizing: '{text[:60]}...' voice={voice}")
 
         backend = self._backend  # type: ignore[no-untyped-call]
-        wav = backend.synthesize(text=text, voice=voice, speed=speed, lang="en-us", fade_ending=fade_ending)
+        wav, _ = backend.synthesize(text=text, voice=voice, speed=speed, lang="en-us", fade_ending=fade_ending)
 
         # Apply expression processing post-synthesis
         if self.expression_processor and expression_tags:
@@ -467,15 +466,14 @@ class TTS:
         else:
             output_sr = native_sr
 
-        duration_s = wav.shape[1] / output_sr
-
         # Keep self.sample_rate in sync with actual output rate for save_audio()
         self.sample_rate = output_sr
 
         if verbose:
-            print(f"   -> Generated {duration_s:.2f}s audio @ {output_sr} Hz")
+            dur_s = wav.shape[1] / output_sr
+            print(f"   -> Generated {dur_s:.2f}s audio @ {output_sr} Hz")
 
-        return wav, duration_s
+        return wav, output_sr
 
     def save_audio(
         self,
@@ -516,7 +514,7 @@ class TTS:
         silence_duration: float = DEFAULT_SILENCE_DURATION,
         lang: Optional[str] = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray, float]:
+    ) -> tuple[np.ndarray, int]:
         """Shorthand for synthesize(). Allows using tts(...) instead of tts.synthesize(...)."""
         return self.synthesize(
             text=text,

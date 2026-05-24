@@ -17,12 +17,12 @@ def test_tts_synthesize():
     """Test TTS synthesize returns correct types."""
     tts = TTS()
     style = tts.get_voice_style("M1")
-    wav, duration = tts.synthesize("Test", voice_style=style, total_steps=3)
+    wav, sr = tts.synthesize("Test", voice_style=style, total_steps=3)
 
     assert isinstance(wav, np.ndarray)
-    assert isinstance(duration, (float, np.floating))
+    assert isinstance(sr, int)
+    assert sr > 0
     assert wav.shape[0] > 0
-    assert duration > 0
 
 
 def test_tts_with_different_voice():
@@ -138,14 +138,16 @@ def test_tts_with_speed_control():
     style = tts.get_voice_style("M1")
 
     # Normal speed
-    wav_normal, dur_normal = tts.synthesize("Test", voice_style=style, total_steps=3, speed=1.0)
+    wav_normal, sr_normal = tts.synthesize("Test", voice_style=style, total_steps=3, speed=1.0)
 
     # Faster
-    wav_fast, dur_fast = tts.synthesize("Test", voice_style=style, total_steps=3, speed=1.5)
+    wav_fast, sr_fast = tts.synthesize("Test", voice_style=style, total_steps=3, speed=1.5)
 
     assert wav_normal.shape[0] > 0
     assert wav_fast.shape[0] > 0
     # Faster should be shorter (approximately)
+    dur_normal = wav_normal.shape[1] / sr_normal
+    dur_fast = wav_fast.shape[1] / sr_fast
     assert dur_fast < dur_normal
 
 
@@ -275,7 +277,7 @@ def test_verbose_mode_output(capsys):
     tts = TTS()
     style = tts.get_voice_style("M1")
 
-    wav, dur = tts.synthesize("Short test text.", voice_style=style, total_steps=3, verbose=True)
+    wav, sr = tts.synthesize("Short test text.", voice_style=style, total_steps=3, verbose=True)
 
     captured = capsys.readouterr()
     assert "Input text length" in captured.out
@@ -289,14 +291,14 @@ def test_call_shorthand():
     style = tts.get_voice_style("M1")
 
     # Using __call__
-    wav1, dur1 = tts("Test", voice_style=style, total_steps=3)
+    wav1, sr1 = tts("Test", voice_style=style, total_steps=3)
 
     # Using synthesize
-    wav2, dur2 = tts.synthesize("Test", voice_style=style, total_steps=3)
+    wav2, sr2 = tts.synthesize("Test", voice_style=style, total_steps=3)
 
     assert wav1.shape == wav2.shape
-    assert isinstance(dur1, (float, np.floating))
-    assert isinstance(dur2, (float, np.floating))
+    assert isinstance(sr1, int)
+    assert isinstance(sr2, int)
 
 
 def test_whitespace_only_text():

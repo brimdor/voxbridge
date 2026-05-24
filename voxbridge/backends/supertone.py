@@ -86,7 +86,7 @@ class SupertoneBackend(TTSBackend):
         speed: float = 1.0,
         lang: str | None = "en",
         total_steps: int = 8,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, int]:
         if self._engine is None:
             raise RuntimeError("SupertoneBackend not loaded. Call .load() first.")
 
@@ -107,7 +107,7 @@ class SupertoneBackend(TTSBackend):
             speed=speed,
             lang=lang,
         )
-        return wav
+        return wav, self.sample_rate
 
     def list_voices(self) -> list[VoiceInfo]:
         from ..loader import get_cache_dir, list_available_voice_style_names

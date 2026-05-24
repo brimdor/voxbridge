@@ -21,7 +21,7 @@ Example:
     style = tts.get_voice_style("M1")  # 10 built-in voices: M1–M5, F1–F5
 
     # English — pass an ISO code to opt into language-specific handling
-    wav, duration = tts.synthesize("Welcome to VoxBridge!", voice_style=style, lang="en")
+    wav, sr = tts.synthesize("Welcome to VoxBridge!", voice_style=style, lang="en")
 
     # Korean
     wav_ko, _ = tts.synthesize("안녕하세요!", voice_style=style, lang="ko")
@@ -36,7 +36,7 @@ Example:
 One-shot convenience (creates/disposes a temporary TTS instance):
     ```python
     from voxbridge import synthesize, save_audio
-    wav, dur = synthesize("Hello world!", voice="bella", provider="kokoro")
+    wav, sr = synthesize("Hello world!", voice="bella", provider="kokoro")
     save_audio(wav, "hello.wav", sample_rate=44100)
     ```
 """
@@ -73,7 +73,7 @@ def synthesize(
     total_steps: int = 8,
     expressions: bool = True,
     normalizer: bool = True,
-) -> tuple[np.ndarray, float]:
+) -> tuple[np.ndarray, int]:
     """One-shot speech synthesis. Creates a temporary TTS instance.
 
     Args:
@@ -88,7 +88,7 @@ def synthesize(
         normalizer: Enable text normalization.
 
     Returns:
-        Tuple of ``(waveform, duration_seconds)``.
+        Tuple of ``(waveform, sample_rate_hz)``.
     """
     tts = TTS(
         model=model,

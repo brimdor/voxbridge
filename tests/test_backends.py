@@ -101,8 +101,8 @@ def test_register_provider_roundtrip():
         def load(self) -> None:
             pass
 
-        def synthesize(self, text, voice, *, speed=1.0, lang="en") -> np.ndarray:
-            return np.zeros((1, 16000), dtype=np.float32)
+        def synthesize(self, text, voice, *, speed=1.0, lang="en") -> tuple[np.ndarray, int]:
+            return np.zeros((1, 16000), dtype=np.float32), 16000
 
         def list_voices(self) -> list[VoiceInfo]:
             return [VoiceInfo(name="alpha", language="en")]
@@ -116,8 +116,9 @@ def test_register_provider_roundtrip():
     inst = build_backend("dummy")
     assert inst.name == "dummy"
     assert inst.sample_rate == 16000
-    wav = inst.synthesize("hello", "alpha")
+    wav, sr = inst.synthesize("hello", "alpha")
     assert wav.shape == (1, 16000)
+    assert sr == 16000
 
 
 # -----------------------------------------------------------------------------
@@ -228,10 +229,11 @@ def test_supertone_backend_get_voice_unknown():
 def test_supertone_backend_synthesize():
     backend = SupertoneBackend(model="supertonic-3")
     backend.load()
-    wav = backend.synthesize("Hello world.", voice="M1", speed=1.0, lang="na", total_steps=4)
+    wav, sr = backend.synthesize("Hello world.", voice="M1", speed=1.0, lang="na", total_steps=4)
     assert wav.ndim == 2
     assert wav.shape[0] == 1
     assert wav.shape[1] > 0
+    assert sr > 0
 
 
 # -----------------------------------------------------------------------------
@@ -245,9 +247,9 @@ def test_tts_supertone_dispatch():
     tts = TTS(model="supertonic-3", provider="supertone")
     assert tts.provider == "supertone"
     style = tts.get_voice_style("M1")
-    wav, dur = tts.synthesize("Hello world", voice_style=style, total_steps=4, verbose=False)
+    wav, sr = tts.synthesize("Hello world", voice_style=style, total_steps=4, verbose=False)
     assert wav.shape[0] == 1
-    assert dur > 0
+    assert sr == tts.sample_rate
 
 
 def test_tts_kokoro_mock():
@@ -257,15 +259,15 @@ def test_tts_kokoro_mock():
     mock_backend = MagicMock()
     mock_backend.sample_rate = 24000
     mock_backend.voice_style_names = ["bella", "echo"]
-    mock_backend.synthesize.return_value = np.zeros((1, 24000), dtype=np.float32)
+    mock_backend.synthesize.return_value = (np.zeros((1, 24000), dtype=np.float32), 24000)
 
     with patch("voxbridge.backends.build_backend", return_value=mock_backend):
         tts = TTS(provider="kokoro")
         assert tts.provider == "kokoro"
         assert tts.sample_rate == 24000
-        wav, dur = tts.synthesize("Hello", voice_style="bella")
+        wav, sr = tts.synthesize("Hello", voice_style="bella")
         assert wav.shape == (1, 44100)  # resampled to 44100
-        assert pytest.approx(dur, 0.01) == 1.0
+        assert sr == 44100
         mock_backend.synthesize.assert_called_once()
 
 
