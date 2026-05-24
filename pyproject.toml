@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxbridge"
-version = "0.1.0"
 description = "Open TTS engine — local, private, expressiveness unlocked. Fork of MIT-licensed Supertonic SDK with open expression support and text normalization."
 readme = "README.md"
 requires-python = ">=3.9"

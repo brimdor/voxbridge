@@ -31,6 +31,26 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Client IP extraction (X-Forwarded-For aware)
+# ---------------------------------------------------------------------------
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP, respecting reverse-proxy headers if present.
+
+    Priority: X-Forwarded-For (first entry) → X-Real-IP → direct connection.
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        # X-Forwarded-For is a comma-separated list; the first entry is
+        # the original client, subsequent entries are proxy hops.
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return request.client.host if request.client else "unknown"
+
+
+# ---------------------------------------------------------------------------
 # Input sanitization
 # ---------------------------------------------------------------------------
 
@@ -111,7 +131,7 @@ def validate_path(path: str, allowed_dirs: Optional[list[str]] = None) -> Path:
     # Check for path traversal patterns
     path_str = str(resolved)
     if ".." in path_str:
-        raise ValueError(f"Path traversal detected: {path}")
+        raise PermissionError(f"Path traversal detected: {path}")
 
     # If allowed dirs specified, verify the path is under one of them
     if allowed_dirs:
@@ -125,7 +145,7 @@ def validate_path(path: str, allowed_dirs: Optional[list[str]] = None) -> Path:
             except ValueError:
                 continue
         if not allowed:
-            raise ValueError(
+            raise PermissionError(
                 f"Path '{path}' is outside allowed directories"
             )
 
@@ -221,7 +241,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # Security headers are added to all responses
         # Rate limiting check
         if self.rate_limiter:
-            client_ip = request.client.host if request.client else "unknown"
+            client_ip = _get_client_ip(request)
             allowed, retry_after = self.rate_limiter.check(client_ip)
             if not allowed:
                 return JSONResponse(
@@ -241,10 +261,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'none'"
+        # CSP is only meaningful for HTML responses; skip it for API binary/JSON.
+        content_type = response.headers.get("content-type", "")
+        if content_type and content_type.startswith("text/html"):
+            response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'none'"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["X-VoxBridge-Version"] = "0.1.0"
+        # Resolve version safely (avoids circular __init__ import).
+        try:
+            from importlib.metadata import version as _version
+            response.headers["X-VoxBridge-Version"] = _version("voxbridge")
+        except Exception:
+            response.headers["X-VoxBridge-Version"] = "0.1.0"
 
         return response
 
@@ -269,9 +297,7 @@ def get_cors_config(
     if origins is None:
         origins = [
             "http://localhost",
-            "http://localhost:*",
             "http://127.0.0.1",
-            "http://127.0.0.1:*",
         ]
 
     return {

@@ -32,10 +32,10 @@ def test_default_model_is_voxbridge_3():
     """Default model should be voxbridge-3 (multilingual, 31 languages)."""
     from voxbridge import AVAILABLE_MODELS, DEFAULT_MODEL
 
-    assert DEFAULT_MODEL == "voxbridge-3"
-    assert "voxbridge-3" in AVAILABLE_MODELS
-    assert "voxbridge-2" in AVAILABLE_MODELS
-    assert "voxbridge" in AVAILABLE_MODELS
+    assert DEFAULT_MODEL == "supertonic-3"
+    assert "supertonic-3" in AVAILABLE_MODELS
+    assert "supertonic-2" in AVAILABLE_MODELS
+    assert "supertonic" in AVAILABLE_MODELS
 
 
 def test_available_languages_contains_31_codes_plus_na():

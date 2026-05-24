@@ -139,8 +139,29 @@ def _do_synthesize(
     # from threads. FastAPI executes our sync handlers in a threadpool, so we
     # serialize here. Within-process throughput is bounded by one synth at a
     # time — that's the right trade-off for a local helper.
-    with state.synth_lock:
-        wav, _ = state.tts.synthesize(text=text, **kwargs)
+    #
+    # NOTE: If this becomes a bottleneck for multi-client workloads, consider
+    # an asyncio.Queue with separate worker thread(s) or ONNX thread-safe
+    # session mode.
+    import signal as _signal
+    from ..config import MAX_SYNTH_SECONDS
+
+    with state.queue_lock:
+        state.synth_active += 1
+    try:
+        with state.synth_lock:
+            # Optional per-synthesis timeout (configurable, default 60s).
+            if MAX_SYNTH_SECONDS is not None and MAX_SYNTH_SECONDS > 0:
+                _signal.alarm(int(MAX_SYNTH_SECONDS))
+                try:
+                    wav, _ = state.tts.synthesize(text=text, **kwargs)
+                finally:
+                    _signal.alarm(0)
+            else:
+                wav, _ = state.tts.synthesize(text=text, **kwargs)
+    finally:
+        with state.queue_lock:
+            state.synth_active = max(0, state.synth_active - 1)
 
     return wav, duration_seconds(wav, state.tts.sample_rate)
 
@@ -187,14 +208,19 @@ def register_routes(app: FastAPI) -> None:
                     model=state.model,
                     version=__version__,
                     voices_loaded=0,
+                    queue_depth=0,
+                    max_synth_seconds=None,
                 ).model_dump(),
             )
+        from ..config import MAX_SYNTH_SECONDS
         return HealthResponse(
             status="ok",
             model=state.model,
             sample_rate=state.tts.sample_rate,
             version=__version__,
             voices_loaded=len(state.tts.voice_style_names) + len(state.custom_styles),
+            queue_depth=state.synth_active,
+            max_synth_seconds=MAX_SYNTH_SECONDS,
         )
 
     @router.get("/v1/styles", response_model=StylesResponse)

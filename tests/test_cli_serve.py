@@ -19,7 +19,7 @@ def test_parser_defaults():
     assert args.command == "serve"
     assert args.host == "127.0.0.1"
     assert args.port == 7788
-    assert args.model == "voxbridge-3"
+    assert args.model == "supertonic-3"
     assert args.cors is None
     assert args.log_level == "info"
 
@@ -34,7 +34,7 @@ def test_parser_overrides():
             "--port",
             "9000",
             "--model",
-            "voxbridge-2",
+            "supertonic-2",
             "--cors",
             "http://localhost:*,chrome-extension://*",
             "--log-level",
@@ -44,7 +44,7 @@ def test_parser_overrides():
     )
     assert args.host == "0.0.0.0"
     assert args.port == 9000
-    assert args.model == "voxbridge-2"
+    assert args.model == "supertonic-2"
     assert args.cors == "http://localhost:*,chrome-extension://*"
     assert args.log_level == "debug"
     assert args.verbose is True
@@ -73,7 +73,7 @@ def test_cmd_serve_missing_fastapi_friendly_error(monkeypatch, capsys):
         verbose=False,
         host="127.0.0.1",
         port=7788,
-        model="voxbridge-3",
+        model="supertonic-3",
         cors=None,
         log_level="info",
     )
@@ -106,7 +106,7 @@ def test_cmd_serve_non_loopback_warns(monkeypatch, capsys):
         verbose=False,
         host="0.0.0.0",
         port=7788,
-        model="voxbridge-3",
+        model="supertonic-3",
         cors=None,
         log_level="info",
     )
@@ -115,4 +115,4 @@ def test_cmd_serve_non_loopback_warns(monkeypatch, capsys):
     assert "Warning" in err and "0.0.0.0" in err
     assert called["host"] == "0.0.0.0"
     assert called["port"] == 7788
-    assert called["model"] == "voxbridge-3"
+    assert called["model"] == "supertonic-3"

@@ -29,16 +29,16 @@ def test_get_cache_dir():
 
 
 def test_get_cache_dir_honors_env_var_with_model_name(monkeypatch, tmp_path):
-    """``get_cache_dir("voxbridge-3")`` must respect ``VOXBRIDGE_CACHE_DIR``.
+    """``get_cache_dir("supertonic-3")`` must respect ``VOXBRIDGE_CACHE_DIR``.
 
     This is the exact reproduction from the bug report: prior to the fix the
     env var was only consulted on the ``model_name is None`` branch, so the
-    default ``TTS(model="voxbridge-3")`` call shape silently ignored it.
+    default ``TTS(model="supertonic-3")`` call shape silently ignored it.
     """
     monkeypatch.setenv("VOXBRIDGE_CACHE_DIR", str(tmp_path))
-    assert get_cache_dir("voxbridge-3") == tmp_path
-    assert get_cache_dir("voxbridge-2") == tmp_path
-    assert get_cache_dir("voxbridge") == tmp_path
+    assert get_cache_dir("supertonic-3") == tmp_path
+    assert get_cache_dir("supertonic-2") == tmp_path
+    assert get_cache_dir("supertonic") == tmp_path
 
 
 def test_get_cache_dir_honors_env_var_without_model_name(monkeypatch, tmp_path):
@@ -66,11 +66,11 @@ def test_get_cache_dir_resolution_is_lazy(monkeypatch, tmp_path):
     module-level ``DEFAULT_CACHE_DIR = os.getenv(...)`` pattern.
     """
     monkeypatch.delenv("VOXBRIDGE_CACHE_DIR", raising=False)
-    first = get_cache_dir("voxbridge-3")
+    first = get_cache_dir("supertonic-3")
     assert first != tmp_path  # baseline: still the default
 
     monkeypatch.setenv("VOXBRIDGE_CACHE_DIR", str(tmp_path))
-    second = get_cache_dir("voxbridge-3")
+    second = get_cache_dir("supertonic-3")
     assert second == tmp_path  # env var picked up *after* the first call
 
 

@@ -15,7 +15,7 @@ from unicodedata import normalize
 import numpy as np
 import onnxruntime as ort  # type: ignore[import-untyped]
 
-from .config import AVAILABLE_LANGUAGES, MAX_SPEED, MIN_SPEED
+from .config import AVAILABLE_LANGUAGES, MAX_SPEED, MIN_SPEED, MAX_TOTAL_STEPS, MIN_TOTAL_STEPS
 
 logger = logging.getLogger(__name__)
 
@@ -497,6 +497,13 @@ class VoxBridge:
             raise ValueError(
                 f"Speed must be between {MIN_SPEED} and {MAX_SPEED}, got {speed:.6f}. "
                 f"Use values closer to 1.05 for more natural speech."
+            )
+
+        # Validate total_step — lower-level guard even though Pydantic schema validates.
+        if not (MIN_TOTAL_STEPS <= total_step <= MAX_TOTAL_STEPS):
+            raise ValueError(
+                f"total_step must be between {MIN_TOTAL_STEPS} and {MAX_TOTAL_STEPS}, "
+                f"got {total_step}. Set VOXBRIDGE_MAX_TOTAL_STEPS to raise the upper cap."
             )
 
         bsz = len(text_list)

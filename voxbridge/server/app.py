@@ -121,6 +121,8 @@ class ServerState:
         "custom_styles",
         "custom_styles_dir",
         "synth_lock",
+        "queue_lock",
+        "synth_active",
         "is_ready",
     )
 
@@ -143,6 +145,8 @@ class ServerState:
         )
         self.custom_styles = dict(custom_styles or {})
         self.synth_lock = threading.Lock()
+        self.queue_lock = threading.Lock()
+        self.synth_active = 0
         self.is_ready = False
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Optional, Union
@@ -36,6 +37,10 @@ from .core import Style, VoxBridge, UnicodeProcessor
 from .utils import validate_voice_style_format
 
 logger = logging.getLogger(__name__)
+
+# Maximum total elements in a style vector (configurable via env).
+# Default 1_000_000 float32 elements = ~4 MB.  Raises if exceeded.
+_MAX_STYLE_ELEMENTS = int(os.getenv("VOXBRIDGE_MAX_STYLE_ELEMENTS", "1000000"))
 
 
 def get_cache_dir(model_name: Optional[str] = None) -> Path:
@@ -396,13 +401,32 @@ def load_voice_style_from_json_file(voice_style_path: Union[Path, str]) -> Style
     voice_style_path = Path(voice_style_path)
 
     def _load_style_from_json(json_data: dict) -> np.ndarray:
-        """Parse style vector from JSON data."""
+        """Parse style vector from JSON data.
+
+        Validates element count before allocating to prevent memory exhaustion
+        from malformed / malicious payloads.
+        """
         try:
             dims = json_data["dims"]
             data = json_data["data"]
-            return np.array(data, dtype=np.float32).reshape(*dims)
         except KeyError as e:
             raise ValueError(f"Invalid style format: missing key {e}") from e
+
+        # Validate shape before allocating the ndarray.
+        expected_elements = int(np.prod(dims))
+        if expected_elements > _MAX_STYLE_ELEMENTS:
+            raise ValueError(
+                f"Style vector too large: {expected_elements} elements "
+                f"(max {_MAX_STYLE_ELEMENTS}). Increase VOXBRIDGE_MAX_STYLE_ELEMENTS if needed."
+            )
+
+        arr = np.array(data, dtype=np.float32)
+        if arr.size != expected_elements:
+            raise ValueError(
+                f"Data length ({arr.size}) doesn't match dims {dims} "
+                f"(expected {expected_elements} elements)"
+            )
+        return arr.reshape(*dims)
 
     if not voice_style_path.exists():
         raise FileNotFoundError(f"Voice style file not found: {voice_style_path}")
