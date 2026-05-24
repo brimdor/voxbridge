@@ -207,6 +207,9 @@ class TTS:
         self._backend = instance
         self.voice_style_names = instance.voice_style_names
         self.is_multilingual = True  # Kokoro supports multiple languages
+        # Recreate expression processor if one exists, with provider info for kokoro-aware effects
+        if self.expression_processor is not None:
+            self.expression_processor = ExpressionProcessor(provider="kokoro")
 
     def get_voice_style(self, voice_name: str) -> Union[Style, str]:
         """Load a voice style by name.
@@ -249,7 +252,7 @@ class TTS:
         silence_duration: float = DEFAULT_SILENCE_DURATION,
         lang: Optional[str] = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, float]:
         """Synthesize speech from text.
 
         This method automatically chunks long text into smaller segments
@@ -404,14 +407,14 @@ class TTS:
         if self.expression_processor and expression_tags:
             wav_cat = self.expression_processor.apply(wav_cat, expression_tags, self.sample_rate)
 
-        total_audio_dur = sum(dur_list)
-        total_silence_dur = silence_duration * (len(wav_list) - 1)
+        total_audio_dur = sum(float(d.item()) for d in dur_list)
+        total_silence_dur = float(silence_duration * (len(wav_list) - 1))
         dur_cat = total_audio_dur + total_silence_dur
 
         if verbose:
             total_samples = wav_cat.shape[1]
             print("Generation complete!")
-            print(f"Total duration: {dur_cat[0]:.2f}s")
+            print(f"Total duration: {dur_cat:.2f}s")
             print(f"Total samples: {total_samples:,}")
             print(f"Array shape: {wav_cat.shape}")
 
@@ -426,7 +429,7 @@ class TTS:
         expression_tags: list,
         verbose: bool,
         fade_ending: bool = True,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, float]:
         """Internal Kokoro synthesis path."""
         from .backends.kokoro import KOKORO_VOICE_MAP
 
@@ -450,13 +453,20 @@ class TTS:
         if self.expression_processor and expression_tags:
             wav = self.expression_processor.apply(wav, expression_tags, self.sample_rate)
 
+        # Resample 24 kHz Kokoro output → 44.1 kHz to match Supertone and sound native
+        if self.sample_rate != 44100:
+            from scipy.signal import resample_poly
+            old_sr = self.sample_rate
+            new_sr = 44100
+            wav = resample_poly(wav, new_sr, old_sr, axis=1).astype(np.float32)
+            self.sample_rate = new_sr
+
         duration_s = wav.shape[1] / self.sample_rate
-        dur = np.array([duration_s], dtype=np.float64)
 
         if verbose:
             print(f"   -> Generated {duration_s:.2f}s audio @ {self.sample_rate} Hz")
 
-        return wav, dur
+        return wav, duration_s
 
     def save_audio(
         self,
@@ -497,7 +507,7 @@ class TTS:
         silence_duration: float = DEFAULT_SILENCE_DURATION,
         lang: Optional[str] = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, float]:
         """Shorthand for synthesize(). Allows using tts(...) instead of tts.synthesize(...)."""
         return self.synthesize(
             text=text,

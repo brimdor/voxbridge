@@ -97,14 +97,16 @@ def _shared_synth(args, *, play: bool = False, save_path: str | None = None) -> 
 
         if play:
             import sounddevice as sd
-            print(f"Playing {duration[0]:.2f}s audio...")
+            dur_val = duration.item() if hasattr(duration, "item") else float(duration)
+            print(f"Playing {dur_val:.2f}s audio...")
             sd.play(wav.squeeze(), tts.sample_rate)
             sd.wait()
             print("   -> Audio played")
         elif save_path is not None:
             from .security import validate_path
             validate_path(save_path)
-            print(f"Saving {duration[0]:.2f}s audio to {save_path}...")
+            dur_val = duration.item() if hasattr(duration, "item") else float(duration)
+            print(f"Saving {dur_val:.2f}s audio to {save_path}...")
             tts.save_audio(wav, save_path)
             print(f"   -> Audio saved to {save_path}")
 

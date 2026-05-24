@@ -6,17 +6,18 @@
 
 VoxBridge is a high-performance, on-device text-to-speech system that runs entirely on your CPU via ONNX Runtime. No cloud calls. No API keys. No paywalled features. No bait and switch.
 
-Forked from the MIT-licensed Supertonic SDK, VoxBridge adds what should have been there from the start: **open expression support** and **production-grade text normalization** — both fully local, both free.
+Forked from the MIT-licensed Supertonic SDK, VoxBridge adds what should have been there from the start: **open expression support**, **production-grade text normalization**, and **pluggable backends** — all fully local, all free.
 
 ## Why VoxBridge?
 
 | Feature | Supertonic (original) | VoxBridge |
 |---|---|---|
 | Local inference | ✅ | ✅ |
-| 31 languages | ✅ | ✅ |
-| 99M param model | ✅ | ✅ |
+| 31 languages | ✅ | ✅ (Supertone) |
+| High-quality English voices | ✅ | ✅ (Kokoro — 53 voices) |
 | No GPU required | ✅ | ✅ |
 | OpenAI-compatible API | ✅ | ✅ |
+| Pluggable backends | ❌ | ✅ **Supertone + Kokoro** |
 | Expression tags (`<laugh>`, `<breath>`, etc.) | ❌ Paywalled behind API key | ✅ **Free, local, numpy-based** |
 | Number/currency/date normalization | ❌ Breaks on real-world text | ✅ **Built-in Normalizer** |
 | Text preprocessing | Basic | **Full pipeline** (currency, time, phone, ordinals) |
@@ -26,18 +27,31 @@ Forked from the MIT-licensed Supertonic SDK, VoxBridge adds what should have bee
 ## Install
 
 ```bash
+# Standard install (Supertone backend + server deps)
 pip install voxbridge
+
+# With Kokoro backend (recommended — best quality English voices)
+pip install voxbridge kokoro-onnx
+
+# With audio playback support
+pip install voxbridge[playback]
+
+# With HTTP server
+pip install voxbridge[serve]
 ```
 
-First run automatically downloads model weights from HuggingFace (~200MB).
+First run automatically downloads model weights:
+- **Supertone**: ~200MB from HuggingFace `Supertone/supertonic-3`
+- **Kokoro**: ~311MB ONNX + voice pack (auto-downloaded on first use)
 
 ## Quick Start
 
-### Python SDK
+### Supertone (default — 31 languages, M1–F5 voices)
 
 ```python
 from voxbridge import TTS
 
+# Default: Supertone backend with 31-language support
 tts = TTS()
 style = tts.get_voice_style("M1")
 
@@ -45,22 +59,52 @@ style = tts.get_voice_style("M1")
 wav, duration = tts.synthesize("Welcome to VoxBridge!", voice_style=style, lang="en")
 tts.save_audio(wav, "output.wav")
 
-# With text normalization (handles money, dates, phone numbers)
+# Multilingual: Korean, English, French, etc.
+wav_ko, _ = tts.synthesize("안녕하세요!", voice_style=style, lang="ko")
+wav_fr, _ = tts.synthesize("Bonjour le monde!", voice_style=style, lang="fr")
+```
+
+### Kokoro (best English — 53 voices, faster, more natural)
+
+```python
+from voxbridge import TTS
+
+# Use Kokoro backend for best-quality English synthesis
+tts = TTS(provider="kokoro")
+
+# Human-readable voice names (no JSON loading needed)
+wav, dur = tts.synthesize("Hello world!", voice_style="bella")
+wav, dur = tts.synthesize("Good afternoon.", voice_style="adam")
+wav, dur = tts.synthesize("Nice to meet you.", voice_style="echo")
+
+# Speed control (0.7–2.0, default 1.0)
+wav, dur = tts.synthesize(
+    "This is a longer sentence with natural prosody.",
+    voice_style="bella",
+    speed=0.95,  # Slightly slower for maximum naturalness
+)
+```
+
+### With Text Normalization
+
+```python
+from voxbridge import TTS
+
+tts = TTS(provider="kokoro")
+
+# Automatically expands: $12,458.75 → "twelve thousand four hundred fifty eight dollars and seventy five cents"
 wav, dur = tts.synthesize(
     "Your balance is $12,458.75, due on June 15, 2026.",
-    voice_style=style,
-    lang="en",
-    normalize=True,  # Auto-expands: "twelve thousand four hundred fifty eight dollars and seventy five cents..."
+    voice_style="bella",
 )
 
-# With expressions — fully local, no API key
+# Automatically expands: 5:30 p.m. → "five thirty PM"
 wav, dur = tts.synthesize(
-    "Hello <laugh/> that's really funny <pause/> but seriously though.",
-    voice_style=style,
-    lang="en",
-    expressions=True,  # Processes <laugh/>, <pause/> tags post-synthesis
+    "Your appointment is at 5:30 p.m.",
+    voice_style="bella",
 )
-tts.save_audio(wav, "output.wav")
+
+# Works with both providers — same Normalizer interface
 ```
 
 ### Expression Tags
@@ -69,8 +113,6 @@ VoxBridge supports 10 expression tags — all processed locally with numpy, no e
 
 | Tag | Effect | Post-processing |
 |---|---|---|
-| `<laugh/>` | Brief laugh | Amplitude modulation + pitch jitter |
-| `<chuckle/>` | Subtle chuckle | Gentle amplitude modulation |
 | `<breath/>` | Intake of breath | Insert silence + noise-shaped breath |
 | `<sigh/>` | Exhale sigh | Long breath noise insert |
 | `<gasp/>` | Sharp gasp | Short sharp breath |
@@ -79,47 +121,85 @@ VoxBridge supports 10 expression tags — all processed locally with numpy, no e
 | `<whisper/>` | Whispered speech | Reduced amplitude + spectral tilt |
 | `<shout/>` | Loud speech | Increased amplitude + brightness |
 | `<cough/>` | Cough sound | Brief noise burst |
+| `<laugh/>` | Brief laugh | **Kokoro**: volume swell (gentle chuckle) |
+| `<laugh/>` | Brief laugh | **Supertone**: amplitude modulation + pitch jitter |
+
+Expressions are **provider-aware**: what sounds good on Supertone's pitch-variable output may not on Kokoro's steady output, so different implementations are used per backend.
+
+```python
+tts = TTS(provider="kokoro")
+wav, dur = tts.synthesize(
+    "Hello <breath/> how are you? <pause/> I'm doing great today.",
+    voice_style="bella",
+)
+```
 
 Custom expressions via `ExpressionProcessor.register_expression()`.
 
-### Text Normalization
+## Backends
 
-The `Normalizer` class pre-processes text before synthesis — critical for production apps:
+VoxBridge uses a **pluggable backend architecture**. Choose the provider that fits your use case:
 
-```python
-from voxbridge.normalizer import Normalizer
+| | **Supertone** (default) | **Kokoro** |
+|---|---|---|
+| **Best for** | Multilingual, 31 languages | English quality, speed |
+| **Sample rate** | 44.1 kHz | 44.1 kHz (auto-resampled from 24 kHz) |
+| **Voices** | M1–M5, F1–F5 (10 built-in) | 53 voices (bella, adam, echo, etc.) |
+| **Speed** | ~0.3x realtime | ~4.5x realtime |
+| **Languages** | 31 + `na` fallback | English (+ 7 other langs via voice selection) |
+| **Expression tags** | Tremolo + jitter (`<laugh/>`) | Volume swell (`<laugh/>`) |
+| **Phrase ending** | Natural fade | Applied 120ms taper |
+| **Model size** | ~200MB | ~338MB |
 
-norm = Normalizer()
-norm.normalize("$12,458.75")
-# → "twelve thousand four hundred fifty eight dollars and seventy five cents"
+### Kokoro Voice Quick Reference
 
-norm.normalize("June 15, 2026")
-# → "June fifteenth, twenty twenty six"
+**American English (female)**: bella, sarah, nicole, sky, jessica, river, alloy, nova, heart, kore, aoede
+**American English (male)**: adam, echo, puck, fenrir, michael, eric, liam, onyx
+**British English (female)**: alice, emma, isabella, lily
+**British English (male)**: daniel, fable, george, lewis
+**Spanish**: dora_es, alex_es, santa_es
+**French**: siwis
+**Hindi**: alpha_hi, beta_hi, omega_hi, psi_hi
+**Italian**: sara, nicola
+**Japanese**: alpha_ja, gongitsune, nezumi, tebukuro, kumo
+**Portuguese (Brazil)**: dora_pt, alex_pt, santa_pt
+**Chinese (Mandarin)**: xiaobei, xiaoni, xiaoxiao, xiaoyi, yunjian, yunxi, yunxia, yunyang
 
-norm.normalize("5:30 p.m.")
-# → "five thirty PM"
+## CLI
 
-norm.normalize("1-800-555-0199")
-# → "one eight hundred five five five zero one nine nine"
+```bash
+# Supertone — default, 31 languages
+voxbridge tts "Hello world" -o hello.wav --voice M1
 
-norm.normalize("1st, 2nd, 3rd")
-# → "first, second, third"
-```
+# Kokoro — best English, 53 voices
+voxbridge tts "Hello world" -o hello.wav --provider kokoro --voice bella
 
-All normalization categories are independently toggleable:
+# Start server with Kokoro
+voxbridge serve --provider kokoro --host 127.0.0.1 --port 7788
 
-```python
-norm = Normalizer(currency=True, dates=True, phone_numbers=False, time=True)
+# List voices for a specific provider
+voxbridge list-voices --provider kokoro
+
+# Show backend info
+voxbridge info --provider kokoro
 ```
 
 ### Local HTTP Server
 
 ```bash
 pip install 'voxbridge[serve]'
-voxbridge serve --host 127.0.0.1 --port 7788
+voxbridge serve --provider kokoro --host 127.0.0.1 --port 7788
 ```
 
-**Note on concurrency:** The HTTP server runs in a FastAPI threadpool. Because ONNX Runtime inference sessions are not thread-safe, synthesis is serialized behind a single lock. This means one request at a time per process — slow high-step requests can create queueing. Check `/v1/health` for `queue_depth` and `max_synth_seconds`. If you need more throughput, run multiple single-process instances behind a reverse proxy (nginx/haproxy) and load-balance.
+**Note on concurrency:** The HTTP server runs in a FastAPI threadpool. Because ONNX Runtime inference sessions are not thread-safe, multiple providers are **serialized** within a single process. If you need both Supertone and Kokoro live simultaneously, run two server instances:
+
+```bash
+# Terminal 1 — Kokoro
+voxbridge serve --provider kokoro --port 7788
+
+# Terminal 2 — Supertone
+voxbridge serve --provider supertone --port 7789
+```
 
 **OpenAI-compatible endpoint** — swap your base URL, done:
 
@@ -127,36 +207,11 @@ voxbridge serve --host 127.0.0.1 --port 7788
 # Drop-in replacement for OpenAI TTS
 curl http://127.0.0.1:7788/v1/audio/speech \
   -H "Content-Type: application/json" \
-  -d '{"model":"supertonic-3","input":"Hello world","voice":"M1"}' \
+  -d '{"model":"kokoro","input":"Hello world","voice":"bella"}' \
   --output speech.mp3
 ```
 
-**Native endpoint** with normalization and expressions:
-
-```bash
-curl http://127.0.0.1:7788/v1/tts \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Your balance is $12,458.75","voice":"M1","normalize":true,"expressions":true}' \
-  --output speech.wav
-```
-
 Interactive API docs at `http://127.0.0.1:7788/docs`.
-
-### CLI
-
-```bash
-# Synthesize to file
-voxbridge say "Hello world" --voice M1 --lang en --output hello.wav
-
-# Start server
-voxbridge serve --host 0.0.0.0 --port 7788
-
-# List voices
-voxbridge list-voices
-
-# Show model info
-voxbridge info
-```
 
 ## Security
 
@@ -179,29 +234,6 @@ text = sanitize_input(user_input, max_length=50000)
 limiter = RateLimiter(max_requests=100, window_seconds=60)
 ```
 
-## Supported Languages
-
-31 languages + language-agnostic fallback:
-
-`ar`, `bg`, `cs`, `da`, `de`, `el`, `en`, `es`, `et`, `fi`, `fr`, `hi`, `hr`, `hu`, `id`, `it`, `ja`, `ko`, `lt`, `lv`, `nl`, `pl`, `pt`, `ro`, `ru`, `sk`, `sl`, `sv`, `tr`, `uk`, `vi`
-
-Pass `lang="na"` for unknown/mixed-language text.
-
-## Voice Styles
-
-10 built-in voices: **M1–M5** (male) and **F1–F5** (female).
-
-Custom voice profiles can be imported from JSON files via the Voice Builder.
-
-## Model Weights
-
-VoxBridge uses the open-weight Supertonic-3 model (OpenRAIL-M license) from HuggingFace:
-
-- **Model**: [`Supertone/supertonic-3`](https://huggingface.co/Supertone/supertonic-3)
-- **License**: BigScience OpenRAIL-M (allows commercial use, modification, and distribution)
-- **Size**: ~200MB download, runs on CPU
-- **No API key required** for basic synthesis
-
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -212,24 +244,29 @@ VoxBridge uses the open-weight Supertonic-3 model (OpenRAIL-M license) from Hugg
 | `VOXBRIDGE_INTRA_OP_THREADS` | Auto | ONNX Runtime intra-op threads |
 | `VOXBRIDGE_INTER_OP_THREADS` | Auto | ONNX Runtime inter-op threads |
 | `VOXBRIDGE_LOG_LEVEL` | `INFO` | Logging level |
+| `VOXBRIDGE_KOKORO_MODEL` | `~/.cache/voxbridge/kokoro/kokoro-v1.0.onnx` | Kokoro ONNX model path |
+| `VOXBRIDGE_KOKORO_VOICES` | `~/.cache/voxbridge/kokoro/voices-v1.0.bin` | Kokoro voice pack path |
 
 ## How It Differs from Supertonic
 
 VoxBridge is a fork of the [Supertonic Python SDK](https://github.com/supertone-inc/supertonic-py) (MIT license). Key differences:
 
-1. **Open expressions**: `<laugh>`, `<breath>`, `<sigh>`, etc. are processed locally with numpy — no API key, no paywall
-2. **Text normalization**: Currency, dates, times, phone numbers, ordinals, abbreviations — all expanded before synthesis
-3. **Security**: Input sanitization, rate limiting, path traversal protection, request size limits
-4. **Rebranding**: Package `supertonic` → `voxbridge`, class `Supertonic` → `VoxBridge`, env vars `SUPERTONIC_*` → `VOXBRIDGE_*`
-5. **Community-first**: No paywalled features. No hidden costs. Everything runs locally.
+1. **Pluggable backends**: Supertone (31 languages) + Kokoro (best English) via `TTS(provider="...")`
+2. **Open expressions**: `<laugh>`, `<breath>`, `<sigh>`, etc. — processed locally with numpy, no API key, no paywall
+3. **Text normalization**: Currency, dates, times, phone numbers, ordinals, abbreviations — all expanded before synthesis
+4. **Security**: Input sanitization, rate limiting, path traversal protection, request size limits
+5. **Rebranding**: Package `supertonic` → `voxbridge`, class `Supertonic` → `VoxBridge`, env vars `SUPERTONIC_*` → `VOXBRIDGE_*`
+6. **Community-first**: No paywalled features. No hidden costs. Everything runs locally.
 
 ## Legal
 
 VoxBridge code is **MIT licensed**. Original Supertonic SDK code is © Supertone Inc. (MIT). New code © Brimdor (MIT).
 
-Model weights (`Supertone/supertonic-3`) are under the **BigScience OpenRAIL-M license**, which permits commercial use, modification, and distribution with use-based restrictions (no criminal/abusive applications). See the [model license](https://huggingface.co/Supertone/supertonic-3/blob/main/LICENSE) for details.
+Model weights:
+- `Supertone/supertonic-3`: **Big**Science OpenRAIL-M license (allows commercial use, modification, and distribution)
+- `Kokoro-82M`: Models from `onnx-community/Kokoro-82M-v1.0-ONNX` under Apache 2.0
 
-See [FORK.md](./FORK.md) for the complete fork history and [LICENSE](./LICENSE) for the full MIT license text.
+See [FORK.md](./FORK.md) for the complete fork history and [LICENSE]（LICENSE) for the full MIT license text.
 
 ## Contributing
 
@@ -237,7 +274,7 @@ PRs welcome. This project exists because the community deserves TTS that doesn't
 
 1. Fork the repo
 2. Create a feature branch
-3. Run `pytest` to verify existing tests pass
+3. Run `pytest` to verify existing tests pass (188 tests as of v0.2.x)
 4. Add tests for new code
 5. Submit a PR
 
@@ -249,3 +286,5 @@ PRs welcome. This project exists because the community deserves TTS that doesn't
 - [ ] Streaming audio output for real-time applications
 - [ ] GPU inference option via CUDAExecutionProvider
 - [ ] Voice cloning from reference audio (local, private)
+- [ ] SSML `<prosody>` support (rate, pitch, volume per word)
+- [ ] Neural spectral extension for Kokoro (post-EQ above 8 kHz)

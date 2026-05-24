@@ -247,7 +247,7 @@ def test_tts_supertone_dispatch():
     style = tts.get_voice_style("M1")
     wav, dur = tts.synthesize("Hello world", voice_style=style, total_steps=4, verbose=False)
     assert wav.shape[0] == 1
-    assert dur[0] > 0
+    assert dur > 0
 
 
 def test_tts_kokoro_mock():
@@ -264,8 +264,8 @@ def test_tts_kokoro_mock():
         assert tts.provider == "kokoro"
         assert tts.sample_rate == 24000
         wav, dur = tts.synthesize("Hello", voice_style="bella")
-        assert wav.shape == (1, 24000)
-        assert pytest.approx(dur[0], 0.01) == 1.0
+        assert wav.shape == (1, 44100)  # resampled to 44100
+        assert pytest.approx(dur, 0.01) == 1.0
         mock_backend.synthesize.assert_called_once()
 
 
