@@ -37,7 +37,7 @@ One-shot convenience (creates/disposes a temporary TTS instance):
     ```python
     from voxbridge import synthesize, save_audio
     wav, sr = synthesize("Hello world!", voice="bella", provider="kokoro")
-    save_audio(wav, "hello.wav", sample_rate=44100)
+    save_audio(wav, "hello.wav", sample_rate=sr)
     ```
 """
 

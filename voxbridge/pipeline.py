@@ -263,7 +263,7 @@ class TTS:
             text: Text to synthesize
             voice_style: Voice style (Style for Supertone, str for Kokoro)
             total_steps: Number of synthesis steps (default: 8). Supertone only.
-            speed: Speech speed multiplier (default: 1.05)
+            speed: Speech speed multiplier (default: 1.0)
             max_chunk_length: Max characters per chunk. If None, automatically
                 determined based on language (300 for most, 120 for Korean)
             silence_duration: Silence between chunks in seconds (default: 0.3)

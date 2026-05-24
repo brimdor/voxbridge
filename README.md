@@ -55,7 +55,7 @@ from voxbridge import synthesize, save_audio
 
 # Generate and save in two lines
 wav, sr = synthesize("Hello world!", voice="sky", provider="kokoro", speed=0.95)
-save_audio(wav, "hello.wav", sample_rate=44100)
+save_audio(wav, "hello.wav", sample_rate=sr)
 ```
 
 Or chain the providers directly:
@@ -65,7 +65,7 @@ from voxbridge import list_providers, build_backend
 
 print(list_providers())  # ['kokoro', 'supertone']
 backend = build_backend("kokoro")
-wav = backend.synthesize("Hello!", voice="heart", speed=1.0)
+audio, sr = backend.synthesize("Hello!", voice="heart", speed=1.0)
 ```
 
 ### Supertone (default — 31 languages, M1–F5 voices)

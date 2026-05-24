@@ -8,8 +8,9 @@ VoxBridge is an open-source TTS (text-to-speech) engine forked from the MIT-lice
 
 ```
 voxbridge/
-├── __init__.py          # Package exports: TTS, Style, Normalizer, ExpressionProcessor
-├── cli.py               # CLI entry point: voxbridge say, serve, list-voices, info
+├── __init__.py          # Package exports: TTS, synthesize, save_audio, list_providers
+├── __main__.py          # Entry point for python3 -m voxbridge (phonemizer suppression)
+├── cli.py               # CLI entry point: voxbridge say, tts, serve, list-voices, info
 ├── config.py            # Constants: model names, languages, speeds, limits, env vars
 ├── core.py              # Core engine: UnicodeProcessor, Style, VoxBridge (ONNX inference)
 ├── expressions.py       # Open expression system: <laugh>, <breath>, <pause>, etc.
@@ -18,6 +19,10 @@ voxbridge/
 ├── pipeline.py           # High-level TTS interface with normalize/expressions support
 ├── security.py           # Input sanitization, rate limiting, CORS, security headers
 ├── utils.py              # Text chunking, filename sanitization, validation
+├── backends/
+│   ├── __init__.py       # TTSBackend protocol, build_backend(), list_providers()
+│   ├── kokoro.py          # Kokoro ONNX backend: 54 voices, 4.5x realtime, best English
+│   └── supertone.py       # Supertone ONNX backend: 31 languages, 10 built-in voices
 └── server/
     ├── app.py            # FastAPI app factory with security middleware
     ├── audio.py           # Audio format encoding (WAV, MP3, FLAC, etc.)
@@ -62,12 +67,14 @@ voxbridge/
 ## Environment Variables
 
 All use `VOXBRIDGE_` prefix:
-- `VOXBRIDGE_CACHE_DIR` — Override model cache directory
-- `VOXBRIDGE_MODEL_REPO` — Override HuggingFace model repo
-- `VOXBRIDGE_MODEL_REVISION` — Override pinned model revision
+- `VOXBRIDGE_CACHE_DIR` — Override model cache directory (both Supertone and Kokoro)
+- `VOXBRIDGE_MODEL_REPO` — Override HuggingFace model repo (Supertone)
+- `VOXBRIDGE_MODEL_REVISION` — Override pinned model revision (Supertone)
 - `VOXBRIDGE_INTRA_OP_THREADS` / `VOXBRIDGE_INTER_OP_THREADS` — ONNX thread control
 - `VOXBRIDGE_LOG_LEVEL` — Logging verbosity
-- `VOXBRIDGE_CUSTOM_STYLES_DIR` — Custom voice styles directory
+- `VOXBRIDGE_CUSTOM_STYLES_DIR` — Custom voice styles directory (Supertone)
+- `VOXBRIDGE_KOKORO_MODEL` — Path to `kokoro-v1.0.onnx` (default: `~/.cache/voxbridge/kokoro/`)
+- `VOXBRIDGE_KOKORO_VOICES` — Path to `voices-v1.0.bin` (default: `~/.cache/voxbridge/kokoro/`)
 
 **Do NOT use `SUPERTONIC_*` env vars** — those are from the upstream package and are not recognized by VoxBridge.
 

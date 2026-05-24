@@ -10,6 +10,6 @@ wav, sr = synthesize(
     provider="kokoro",
     speed=0.95,
 )
-save_audio(wav, "output.wav", sample_rate=44100)
+save_audio(wav, "output.wav", sample_rate=sr)
 dur = wav.shape[1] / sr
 print(f"Saved {dur:.2f}s of audio to output.wav")
