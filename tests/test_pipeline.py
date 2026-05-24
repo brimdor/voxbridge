@@ -20,9 +20,9 @@ def test_tts_synthesize():
     wav, duration = tts.synthesize("Test", voice_style=style, total_steps=3)
 
     assert isinstance(wav, np.ndarray)
-    assert isinstance(duration, np.ndarray)
+    assert isinstance(duration, (float, np.floating))
     assert wav.shape[0] > 0
-    assert duration[0] > 0
+    assert duration > 0
 
 
 def test_tts_with_different_voice():
@@ -146,7 +146,7 @@ def test_tts_with_speed_control():
     assert wav_normal.shape[0] > 0
     assert wav_fast.shape[0] > 0
     # Faster should be shorter (approximately)
-    assert dur_fast[0] < dur_normal[0]
+    assert dur_fast < dur_normal
 
 
 def test_text_length_validation():
@@ -295,8 +295,8 @@ def test_call_shorthand():
     wav2, dur2 = tts.synthesize("Test", voice_style=style, total_steps=3)
 
     assert wav1.shape == wav2.shape
-    assert isinstance(dur1, np.ndarray)
-    assert isinstance(dur2, np.ndarray)
+    assert isinstance(dur1, (float, np.floating))
+    assert isinstance(dur2, (float, np.floating))
 
 
 def test_whitespace_only_text():

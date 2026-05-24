@@ -117,6 +117,7 @@ class ServerState:
 
     __slots__ = (
         "model",
+        "provider",
         "tts",
         "custom_styles",
         "custom_styles_dir",
@@ -129,15 +130,15 @@ class ServerState:
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
+        provider: str = "supertone",
         *,
         tts: Optional["TTS"] = None,
         custom_styles_dir: Optional[Path] = None,
         custom_styles: Optional[Dict[str, Path]] = None,
     ) -> None:
         self.model = model
+        self.provider = provider
         self.tts = tts
-        # Custom styles default to the *model's* cache dir, so the same name
-        # cannot collide across model versions.
         self.custom_styles_dir = (
             Path(custom_styles_dir)
             if custom_styles_dir
@@ -154,51 +155,46 @@ def create_app(
     *,
     state: Optional[ServerState] = None,
     model: str = DEFAULT_MODEL,
+    provider: str = "supertone",
     custom_styles_dir: Optional[Path] = None,
     cors_origins: Optional[Iterable[str]] = None,
     rate_limit: int = 60,
     enable_normalizer: bool = True,
     enable_expressions: bool = True,
 ) -> FastAPI:
-    """Build a configured FastAPI app.
-
-    Args:
-        state: Pre-built state to reuse. When provided, the lifespan does *not*
-            instantiate :class:`voxbridge.TTS` — useful for tests that inject
-            a fake. Pass ``None`` for normal use.
-        model: Model name to load if ``state.tts`` is ``None``.
-        custom_styles_dir: Override the on-disk location of user-imported
-            voice styles. Defaults to
-            :func:`voxbridge.server.styles_store.default_custom_styles_dir`.
-        cors_origins: If non-empty, install ``CORSMiddleware`` for these
-            origins. Browser-extension or Electron clients need this; n8n and
-            curl do not.
-        rate_limit: Maximum requests per minute per IP. 0 to disable.
-        enable_normalizer: Whether to enable text normalization preprocessing.
-        enable_expressions: Whether to enable expression tag processing.
-    """
+    """Build a configured FastAPI app."""
     if state is None:
-        state = ServerState(model=model, custom_styles_dir=custom_styles_dir)
+        state = ServerState(model=model, provider=provider, custom_styles_dir=custom_styles_dir)
+        # When serving Kokoro, model should reflect the provider for health checks
+        if provider == "kokoro":
+            state.model = "kokoro"
     elif custom_styles_dir is not None:
         state.custom_styles_dir = Path(custom_styles_dir)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if state.tts is None:
-            # Import here so that ``voxbridge.server`` import does not pull
-            # the model loader into hot paths or test harnesses that mock it.
             from ..pipeline import TTS
 
-            logger.info("Loading TTS model %r ...", state.model)
-            state.tts = TTS(
-                model=state.model,
-                normalizer=enable_normalizer,
-                expressions=enable_expressions,
-            )
+            logger.info("Loading TTS provider=%r model=%r ...", state.provider, state.model)
+            if state.provider == "kokoro":
+                state.tts = TTS(
+                    provider=state.provider,
+                    normalizer=enable_normalizer,
+                    expressions=enable_expressions,
+                )
+            else:
+                state.tts = TTS(
+                    model=state.model,
+                    provider=state.provider,
+                    normalizer=enable_normalizer,
+                    expressions=enable_expressions,
+                )
         state.custom_styles = styles_store.scan(state.custom_styles_dir)
         state.is_ready = True
         logger.info(
-            "voxbridge serve ready: model=%s builtin=%d custom=%d",
+            "voxbridge serve ready: provider=%s model=%s builtin=%d custom=%d",
+            state.provider,
             state.model,
             len(state.tts.voice_style_names) if state.tts else 0,
             len(state.custom_styles),

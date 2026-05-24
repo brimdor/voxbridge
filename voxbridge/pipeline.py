@@ -49,9 +49,13 @@ class TTS:
     """High-level interface for VoxBridge text-to-speech synthesis.
 
     Args:
-        model: Model name to use. One of ``"supertonic"`` (English only),
+        model: Model name to use (Supertone models only).
+            One of ``"supertonic"`` (English only),
             ``"supertonic-2"`` (5 languages), or ``"supertonic-3"`` (31
             languages + ``"na"`` fallback). Default: ``"supertonic-3"``.
+        provider: Backend provider name. ``"supertone"`` uses the existing
+            VoxBridge ONNX pipeline; ``"kokoro"`` uses the Kokoro ONNX
+            backend.  Default: ``"supertone"``.
         model_dir: Directory containing model files. If None, uses default cache
             directory based on model name.
         auto_download: If True, automatically downloads model files from
@@ -68,12 +72,12 @@ class TTS:
             <breath>, <pause> in text before and after synthesis.
 
     Attributes:
-        model (voxbridge.core.VoxBridge): The underlying VoxBridge engine
-        model_name (str): Name of the loaded model
+        model (voxbridge.core.VoxBridge): The underlying VoxBridge engine (Supertone only)
+        model_name (str): Name of the loaded model (Supertone models)
         model_dir (pathlib.Path): Path to the model directory
         sample_rate (int): Audio sample rate in Hz
         voice_style_names (list[str]): List of available voice style names
-        is_multilingual (bool): Whether the model supports multiple languages
+        is_multilingual (bool): Whether the model supports multiple languages (Supertone only)
         normalizer (Normalizer): Text normalizer instance (or None if disabled)
         expression_processor (ExpressionProcessor): Expression processor (or None if disabled)
 
@@ -86,23 +90,20 @@ class TTS:
         style = tts.get_voice_style("M1")
         wav, dur = tts.synthesize("Hello!", voice_style=style, lang="en")
 
+        # Use Kokoro backend with human-readable voice names
+        tts_k = TTS(provider="kokoro")
+        wav, dur = tts_k.synthesize("Hello!", voice_style="bella", lang="en")
+
         # With text normalization and expressions
         tts = TTS(normalizer=True, expressions=True)
         wav, dur = tts.synthesize("Meeting at 5:30 PM <laugh/>", voice_style=style, lang="en")
-
-        # Unknown language fallback (supertonic-3)
-        wav, dur = tts.synthesize("Some text", voice_style=style, lang="na")
-
-        # Use a specific model version
-        tts_v1 = TTS(model="supertonic")    # English only
-        tts_v2 = TTS(model="supertonic-2")  # 5 languages
-        tts_v3 = TTS(model="supertonic-3")  # 31 languages + na
         ```
     """
 
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
+        provider: str = "supertone",
         model_dir: Optional[Union[Path, str]] = None,
         auto_download: bool = True,
         intra_op_num_threads: Optional[int] = None,
@@ -113,9 +114,11 @@ class TTS:
         """Initialize the TTS engine.
 
         Args:
-            model: Model name. One of ``AVAILABLE_MODELS``. Default: ``"supertonic-3"``.
+            model: Model name. One of ``AVAILABLE_MODELS``. Only used when
+                ``provider="supertone"``.  Default: ``"supertonic-3"``.
+            provider: Backend provider — ``"supertone"`` or ``"kokoro"``.  Default: ``"supertone"``.
             model_dir (Union[Path, str]): Directory containing model files. If None, uses default
-                cache directory based on model name
+                cache directory based on model name.
             auto_download: If True, automatically downloads missing model files
             intra_op_num_threads: Number of threads for intra-op parallelism.
                 If None (default), ONNX Runtime automatically determines optimal value based on your system.
@@ -127,27 +130,8 @@ class TTS:
             expressions: If True, use default ExpressionProcessor; if an ExpressionProcessor instance,
                 use that; if False, disable expression processing.
         """
-        # Validate model name
-        if model not in AVAILABLE_MODELS:
-            raise ValueError(
-                f"Invalid model: '{model}'. " f"Available models: {', '.join(AVAILABLE_MODELS)}"
-            )
-
-        self.model_name = model
-        self.is_multilingual = is_multilingual_model(model)
-
-        if model_dir is None:
-            model_dir = get_cache_dir(model)
-
-        if not isinstance(model_dir, Path):
-            model_dir = Path(model_dir)
-
-        self.model = load_model(
-            model_dir, auto_download, intra_op_num_threads, inter_op_num_threads, model
-        )
-        self.model_dir = model_dir
-        self.sample_rate = self.model.sample_rate
-        self.voice_style_names = list_available_voice_style_names(model_dir)
+        self.provider = provider
+        self._backend: Optional[object] = None  # supertone: VoxBridge engine; kokoro: KokoroBackend
 
         # Set up normalizer
         if isinstance(normalizer, Normalizer):
@@ -165,17 +149,81 @@ class TTS:
         else:
             self.expression_processor = None
 
-    def get_voice_style(self, voice_name: str) -> Style:
-        """Load a voice style by name. Available voice style names can be listed with
-            `list_available_voice_style_names()`.
+        if provider == "supertone":
+            self._init_supertone(
+                model=model,
+                model_dir=model_dir,
+                auto_download=auto_download,
+                intra_op_num_threads=intra_op_num_threads,
+                inter_op_num_threads=inter_op_num_threads,
+            )
+        elif provider == "kokoro":
+            self._init_kokoro()
+        else:
+            raise ValueError(
+                f"Unknown provider: '{provider}'.  "
+                f"Use 'supertone' for the VoxBridge/Supertone ONNX pipeline "
+                f"or 'kokoro' for the Kokoro ONNX backend."
+            )
+
+    def _init_supertone(
+        self,
+        model: str = DEFAULT_MODEL,
+        model_dir: Optional[Union[Path, str]] = None,
+        auto_download: bool = True,
+        intra_op_num_threads: Optional[int] = None,
+        inter_op_num_threads: Optional[int] = None,
+    ) -> None:
+        """Set up the Supertone (legacy VoxBridge ONNX) backend state."""
+        if model not in AVAILABLE_MODELS:
+            raise ValueError(
+                f"Invalid model: '{model}'. " f"Available models: {', '.join(AVAILABLE_MODELS)}"
+            )
+
+        self.model_name = model
+        self.is_multilingual = is_multilingual_model(model)
+
+        if model_dir is None:
+            model_dir = get_cache_dir(model)
+        if not isinstance(model_dir, Path):
+            model_dir = Path(model_dir)
+
+        self.model = load_model(
+            model_dir, auto_download, intra_op_num_threads, inter_op_num_threads, model
+        )
+        self.model_dir = model_dir
+        self.sample_rate = self.model.sample_rate
+        self.voice_style_names = list_available_voice_style_names(model_dir)
+        self._backend = self.model
+
+    def _init_kokoro(self) -> None:
+        """Set up the Kokoro ONNX backend."""
+        from .backends import build_backend
+
+        self.model_name = "kokoro"
+        self.model_dir = Path.home() / ".cache" / "voxbridge" / "kokoro"
+        instance = build_backend("kokoro")
+        self.sample_rate = instance.sample_rate
+        self._backend = instance
+        self.voice_style_names = instance.voice_style_names
+        self.is_multilingual = True  # Kokoro supports multiple languages
+        # Recreate expression processor if one exists, with provider info for kokoro-aware effects
+        if self.expression_processor is not None:
+            self.expression_processor = ExpressionProcessor(provider="kokoro")
+
+    def get_voice_style(self, voice_name: str) -> Union[Style, str]:
+        """Load a voice style by name.
 
         Args:
-            voice_name: Name of the voice style. VoxBridge-3 ships with
-                10 built-in voices: ``'M1'..'M5'`` and ``'F1'..'F5'``.
+            voice_name: Name of the voice style.
+                For Supertone: ``'M1'..'F5'``.
+                For Kokoro: ``'bella'``, ``'echo'``, ``'sarah'``, etc.
 
         Returns:
-            Style object containing voice style vectors
+            Style object (Supertone) or voice name string (Kokoro).
         """
+        if self.provider == "kokoro":
+            return voice_name
         return load_voice_style_from_name(self.model_dir, voice_name)
 
     def get_voice_style_from_path(self, voice_style_path: Union[Path, str]) -> Style:
@@ -187,19 +235,24 @@ class TTS:
         Returns:
             Style object containing voice style vectors
         """
+        if self.provider == "kokoro":
+            raise NotImplementedError(
+                "Kokoro backend does not support custom voice style JSON files. "
+                "Use the built-in voice names instead."
+            )
         return load_voice_style_from_json_file(voice_style_path)
 
     def synthesize(
         self,
         text: str,
-        voice_style: Style,
+        voice_style: Union[Style, str],
         total_steps: int = DEFAULT_TOTAL_STEPS,
         speed: float = DEFAULT_SPEED,
         max_chunk_length: Optional[int] = None,
         silence_duration: float = DEFAULT_SILENCE_DURATION,
         lang: Optional[str] = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, float]:
         """Synthesize speech from text.
 
         This method automatically chunks long text into smaller segments
@@ -208,33 +261,20 @@ class TTS:
 
         Args:
             text: Text to synthesize
-            voice_style: Voice style object
-            total_steps: Number of synthesis steps (default: 8)
+            voice_style: Voice style (Style for Supertone, str for Kokoro)
+            total_steps: Number of synthesis steps (default: 8). Supertone only.
             speed: Speech speed multiplier (default: 1.05)
             max_chunk_length: Max characters per chunk. If None, automatically
                 determined based on language (300 for most, 120 for Korean)
             silence_duration: Silence between chunks in seconds (default: 0.3)
             lang: Language code for synthesis. If ``None`` (default), the
-                code is resolved from the loaded model: ``"na"`` for
-                multilingual models (multilingual models) so unknown text "just
-                works", and ``"en"`` for the English-only the English-only model.
-                See ``AVAILABLE_LANGUAGES`` for the full list of codes
-                supported by the loaded model.
+                code is resolved from the loaded model.
             verbose: If True, print detailed progress information (default: False)
 
         Returns:
             Tuple of (waveform, duration):
                 - waveform: Audio array of shape (1, num_samples)
                 - duration: Total duration in seconds
-
-        Example:
-            ```python
-            tts = TTS()
-            style = tts.get_voice_style("M1")
-            wav, dur = tts.synthesize("Hello, world!", voice_style=style, lang="en")
-            wav_ko, dur_ko = tts.synthesize("안녕하세요!", voice_style=style, lang="ko")
-            print(f"Generated {dur[0]:.2f}s of audio")
-            ```
         """
         # Validate inputs
         if not text or not text.strip():
@@ -249,9 +289,18 @@ class TTS:
         if self.normalizer:
             text = self.normalizer.normalize(text)
 
-        # Resolve default lang based on the loaded model:
-        #   - multilingual (multilingual models) → "na" so unknown text just works
-        #   - English-only (the English-only model)  → "en"
+        if self.provider == "kokoro":
+            return self._synthesize_kokoro(
+                text=text,
+                voice=voice_style if isinstance(voice_style, str) else str(voice_style),
+                speed=speed,
+                silence_duration=silence_duration,
+                expression_tags=expression_tags,
+                verbose=verbose,
+            )
+
+        # Supertone path
+        # Resolve default lang based on the loaded model
         if lang is None:
             lang = UNKNOWN_LANGUAGE if self.is_multilingual else DEFAULT_LANGUAGE
 
@@ -264,7 +313,6 @@ class TTS:
                 )
             effective_lang: Optional[str] = lang
         else:
-            # Non-multilingual model (the English-only model) - ignore language parameter
             if lang != "en" and verbose:
                 print(f"⚠️  Model '{self.model_name}' is English-only. Ignoring lang='{lang}'.")
             effective_lang = None  # Don't add language tokens for v1
@@ -314,7 +362,7 @@ class TTS:
         if verbose:
             print(f"Split into {len(text_chunks)} chunk(s)")
             if len(text_chunks) > 1:
-                for i, chunk in enumerate(text_chunks[:3]):  # Show first 3 chunks
+                for i, chunk in enumerate(text_chunks[:3]):
                     print(f"Chunk {i+1}: {chunk[:60]}{'...' if len(chunk) > 60 else ''}")
                 if len(text_chunks) > 3:
                     print(f"... and {len(text_chunks) - 3} more chunk(s)")
@@ -322,7 +370,7 @@ class TTS:
                 f"Synthesizing audio... Settings: steps={total_steps}, speed={speed:.2f}x, sample_rate={self.sample_rate}Hz"
             )
 
-        # Collect all waveforms and durations in lists to avoid repeated concatenation
+        # Synthesize each chunk
         wav_list = []
         dur_list = []
         for i, text_chunk in enumerate(text_chunks):
@@ -337,44 +385,88 @@ class TTS:
             if verbose:
                 print(f"✓ ({dur_onnx[0]:.2f}s)")
 
-            # Validate waveform shape
             if wav.shape[0] != 1:
                 raise RuntimeError(f"Expected wav shape (1, samples), got {wav.shape}")
 
             wav_list.append(wav)
             dur_list.append(dur_onnx)
 
-        # Type guard: lists should never be empty after processing
         assert len(wav_list) > 0 and len(dur_list) > 0, "No audio generated"
 
-        # Build list of arrays to concatenate: [wav1, silence, wav2, silence, wav3, ...]
+        # Build list to concatenate
         silence = np.zeros((1, int(silence_duration * self.sample_rate)), dtype=np.float32)
         arrays_to_concat = []
         for i, wav in enumerate(wav_list):
             arrays_to_concat.append(wav)
-            if i < len(wav_list) - 1:  # Don't add silence after last chunk
+            if i < len(wav_list) - 1:
                 arrays_to_concat.append(silence)
 
-        # Single concatenation operation
         wav_cat = np.concatenate(arrays_to_concat, axis=1)
 
         # Apply expression processing post-synthesis
         if self.expression_processor and expression_tags:
             wav_cat = self.expression_processor.apply(wav_cat, expression_tags, self.sample_rate)
 
-        # Calculate total duration
-        total_audio_dur = sum(dur_list)
-        total_silence_dur = silence_duration * (len(wav_list) - 1)
+        total_audio_dur = sum(float(d.item()) for d in dur_list)
+        total_silence_dur = float(silence_duration * (len(wav_list) - 1))
         dur_cat = total_audio_dur + total_silence_dur
 
         if verbose:
             total_samples = wav_cat.shape[1]
             print("Generation complete!")
-            print(f"Total duration: {dur_cat[0]:.2f}s")
+            print(f"Total duration: {dur_cat:.2f}s")
             print(f"Total samples: {total_samples:,}")
             print(f"Array shape: {wav_cat.shape}")
 
         return wav_cat, dur_cat
+
+    def _synthesize_kokoro(
+        self,
+        text: str,
+        voice: str,
+        speed: float,
+        silence_duration: float,
+        expression_tags: list,
+        verbose: bool,
+        fade_ending: bool = True,
+    ) -> tuple[np.ndarray, float]:
+        """Internal Kokoro synthesis path."""
+        from .backends.kokoro import KOKORO_VOICE_MAP
+
+        # Validate voice
+        if voice not in KOKORO_VOICE_MAP:
+            available = ", ".join(sorted(KOKORO_VOICE_MAP))[:100]
+            raise ValueError(f"Unknown Kokoro voice: {voice!r}.  Available: {available}...")
+
+        if len(text) > MAX_TEXT_LENGTH:
+            raise ValueError(
+                f"Text length ({len(text)}) exceeds maximum allowed length ({MAX_TEXT_LENGTH})."
+            )
+
+        if verbose:
+            print(f"🎙️  Kokoro synthesizing: '{text[:60]}...' voice={voice}")
+
+        backend = self._backend  # type: ignore[no-untyped-call]
+        wav = backend.synthesize(text=text, voice=voice, speed=speed, lang="en-us", fade_ending=fade_ending)
+
+        # Apply expression processing post-synthesis
+        if self.expression_processor and expression_tags:
+            wav = self.expression_processor.apply(wav, expression_tags, self.sample_rate)
+
+        # Resample 24 kHz Kokoro output → 44.1 kHz to match Supertone and sound native
+        if self.sample_rate != 44100:
+            from scipy.signal import resample_poly
+            old_sr = self.sample_rate
+            new_sr = 44100
+            wav = resample_poly(wav, new_sr, old_sr, axis=1).astype(np.float32)
+            self.sample_rate = new_sr
+
+        duration_s = wav.shape[1] / self.sample_rate
+
+        if verbose:
+            print(f"   -> Generated {duration_s:.2f}s audio @ {self.sample_rate} Hz")
+
+        return wav, duration_s
 
     def save_audio(
         self,
@@ -397,11 +489,7 @@ class TTS:
             ) from e
 
         output_path_obj = Path(output_path)
-
-        # Create parent directories if they don't exist
         output_path_obj.parent.mkdir(parents=True, exist_ok=True)
-
-        # Check write permissions
         if not os.access(output_path_obj.parent, os.W_OK):
             raise PermissionError(f"No write permission for directory: {output_path_obj.parent}")
 
@@ -412,45 +500,15 @@ class TTS:
     def __call__(
         self,
         text: str,
-        voice_style: Style,
+        voice_style: Union[Style, str],
         total_steps: int = DEFAULT_TOTAL_STEPS,
         speed: float = DEFAULT_SPEED,
         max_chunk_length: Optional[int] = None,
         silence_duration: float = DEFAULT_SILENCE_DURATION,
         lang: Optional[str] = None,
         verbose: bool = False,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Shorthand for synthesize(). Allows using tts(...) instead of tts.synthesize(...).
-
-        Args:
-            text: Text to synthesize
-            voice_style: Voice style object
-            total_steps: Number of synthesis steps (default: 8)
-            speed: Speech speed multiplier (default: 1.05)
-            max_chunk_length: Max characters per chunk. If None, automatically
-                determined based on language (300 for most, 120 for Korean)
-            silence_duration: Silence between chunks in seconds (default: 0.3)
-            lang: Language code for synthesis. If ``None`` (default), the
-                code is resolved from the loaded model: ``"na"`` for
-                multilingual models (multilingual models), ``"en"`` for the
-                English-only the English-only model. See ``AVAILABLE_LANGUAGES``
-                for the full list.
-            verbose: If True, print detailed progress information (default: False)
-
-        Returns:
-            Tuple of (waveform, duration):
-                - waveform: Audio array of shape (1, num_samples)
-                - duration: Total duration in seconds
-
-        Example:
-            ```python
-            tts = TTS()
-            style = tts.get_voice_style("M1")
-            wav, dur = tts("Hello, world!", voice_style=style, lang="en")
-            wav_ko, dur_ko = tts("안녕하세요!", voice_style=style, lang="ko")
-            print(f"Generated {dur[0]:.2f}s of audio")
-            ```
-        """
+    ) -> tuple[np.ndarray, float]:
+        """Shorthand for synthesize(). Allows using tts(...) instead of tts.synthesize(...)."""
         return self.synthesize(
             text=text,
             voice_style=voice_style,

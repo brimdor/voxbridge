@@ -180,13 +180,15 @@ class ExpressionProcessor:
         ```
     """
 
-    def __init__(self, default_pause_duration: float = _DEFAULT_PAUSE_DURATION_S):
+    def __init__(self, default_pause_duration: float = _DEFAULT_PAUSE_DURATION_S, *, provider: str = ""):
         """Initialize the ExpressionProcessor.
 
         Args:
             default_pause_duration: Default pause duration in seconds for ``<pause>`` tags
+            provider: TTS backend provider name — affects which expression implementations are used
         """
         self.default_pause_duration = default_pause_duration
+        self.provider = provider
         self._custom_expressions: dict[str, ExpressionDefinition] = {}
 
         # Built-in expression durations (seconds)
@@ -366,18 +368,47 @@ class ExpressionProcessor:
     # --- Built-in implementations ---
 
     def _apply_laugh(self, wav: np.ndarray, tag: ExpressionTag, sr: int) -> np.ndarray:
-        """Apply laugh/chuckle: amplitude modulation + pitch jitter."""
+        """Apply laugh/chuckle: provider-aware.'''
+        Supertone: amplitude modulation + pitch jitter (tremolo works well).
+        Kokoro: gentle volume swell (no pitch modulation — avoids harmonic tearing).
+        """
         duration = self._get_duration(tag)
         duration_samples = min(int(duration * sr), wav.shape[-1])
         start = max(0, min(tag.start_sample, wav.shape[-1] - duration_samples))
         end = start + duration_samples
         segment = wav[:, start:end]
-        segment = _amplitude_modulate(segment, sr, rate=8.0 if tag.kind == "laugh" else 12.0,
-                                       depth=0.3 if tag.kind == "laugh" else 0.15)
-        segment = _pitch_jitter(segment, sr, jitter_hz=4.0 if tag.kind == "laugh" else 6.0,
-                                jitter_depth=0.03)
+
+        if self.provider == "kokoro":
+            # Volume swell: rise 30%, hold, fall 30% — emulates breathy chuckle
+            segment = self._apply_volume_swell(segment, sr, duration_s=duration)
+        else:
+            # Supertone: tremolo + jitter works well on pitch-variable output
+            segment = _amplitude_modulate(
+                segment, sr, rate=8.0 if tag.kind == "laugh" else 12.0,
+                depth=0.3 if tag.kind == "laugh" else 0.15
+            )
+            segment = _pitch_jitter(
+                segment, sr, jitter_hz=4.0 if tag.kind == "laugh" else 6.0,
+                jitter_depth=0.03
+            )
         wav[:, start:end] = segment
         return wav
+
+    def _apply_volume_swell(self, wav: np.ndarray, sr: int, duration_s: float = 0.4) -> np.ndarray:
+        """Gentle volume envelope: fade in, hold, fade out — mimics breathy chuckle."""
+        n = wav.shape[-1]
+        if n < 2:
+            return wav
+        envelope = np.ones(n, dtype=wav.dtype)
+        # Rise over 30% of sample count, fall over last 30%
+        rise = int(n * 0.3)
+        fall = int(n * 0.3)
+        if rise > 1:
+            # Hann-cosine rise from 0 → 1
+            envelope[:rise] = 0.5 * (1.0 - np.cos(np.pi * np.arange(rise) / rise))
+        if fall > 1:
+            envelope[-fall:] = np.linspace(1.0, 0.4, fall, dtype=wav.dtype)
+        return wav * envelope[np.newaxis, :]
 
     def _apply_breath(self, wav: np.ndarray, tag: ExpressionTag, sr: int) -> np.ndarray:
         """Apply breath/sigh/gasp: insert silence + noise-shaped breath."""

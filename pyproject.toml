@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxbridge"
+version = "0.2.0"
 description = "Open TTS engine — local, private, expressiveness unlocked. Fork of MIT-licensed Supertonic SDK with open expression support and text normalization."
 readme = "README.md"
 requires-python = ">=3.9"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "Yu, Yechan", email = "ato@supertone.ai"},
     {name = "Lee, Juheon", email = "juheon@supertone.ai"},
